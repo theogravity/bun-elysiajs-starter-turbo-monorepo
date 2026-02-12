@@ -1,0 +1,38 @@
+pre-commit:
+  commands:
+    parallel: true
+    "update pnpm lockfiles":
+      glob: "**/package.json"
+      run: pnpm install
+      stage_fixed: true
+    "format package.json files":
+      glob: "**/package.json"
+      run: pnpm run syncpack:format
+      stage_fixed: true
+      tags:
+        - package-lint
+    "check package.json files":
+      glob: "**/package.json"
+      run: pnpm run syncpack:lint
+      stage_fixed: true
+      tags:
+        - package-lint
+    "lint staged":
+      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
+      run: turbo run lint:staged
+      stage_fixed: true
+      tags:
+        - lint
+        - staged-lint
+
+pre-push:
+  parallel: true
+  commands:
+    "verify types":
+      run: pnpm run verify-types
+      tags:
+        - types
+    "lint":
+      run: pnpm run lint
+      tags:
+        - lint

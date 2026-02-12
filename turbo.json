@@ -1,0 +1,30 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "clean": {
+      "cache": false
+    },
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "build:dev": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false
+    },
+    "lint": {},
+    "lint:staged": {
+      "cache": true
+    },
+    "test": {
+      "cache": false
+    },
+    "verify-types": {},
+    "prod": {
+      "persistent": true
+    },
+    "generate": {}
+  }
+}
