@@ -20,6 +20,7 @@ async function initializePostgres() {
   console.log("Starting postgres container");
   const postgresContainer = await new PostgreSqlContainer("postgres:16").start();
 
+  process.env.DB_HOST = postgresContainer.getHost();
   process.env.DB_PORT = postgresContainer.getPort().toString();
   process.env.DB_USER = postgresContainer.getUsername();
   process.env.DB_PASS = postgresContainer.getPassword();
