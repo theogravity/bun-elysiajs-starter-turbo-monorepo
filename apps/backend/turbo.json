@@ -29,9 +29,6 @@
       "persistent": true,
       "cache": false
     },
-    "generate": {
-      "inputs": ["src/**", "scripts/**"],
-      "outputs": ["../../packages/backend-client/openapi.yml"]
-    }
+    "generate": {}
   }
 }

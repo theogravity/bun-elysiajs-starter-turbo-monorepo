@@ -1,59 +1,42 @@
-import { type Static, Type } from "typebox";
-import { TypeRef } from "@/types.js";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { Elysia, t } from "elysia";
+import { contextPlugin } from "@/plugins/context.plugin.js";
 {{#ifEquals methodType "GET" }}{{set "responseCode" 200 }}{{/ifEquals}}{{#ifEquals methodType "POST" }}{{set "responseCode" 200 }}{{/ifEquals}}{{#ifEquals methodType "PUT" }}{{set "responseCode" 201 }}{{/ifEquals}}{{#ifEquals methodType "DELETE" }}{{set "responseCode" 204 }}{{/ifEquals}}
-const {{ properCase operationName }}RequestSchema = Type.Object(
-  {
-    description: Type.String({
-      description: "Define your request body here",
-    }),
-  },
-  { $id: "{{ properCase operationName }}Request" },
-);
+const {{ properCase operationName }}RequestSchema = t.Object({
+  description: t.String({
+    description: "Define your request body here",
+  }),
+});
 
-export type {{ properCase operationName }}Request = Static<typeof {{ properCase operationName }}RequestSchema>;
+export type {{ properCase operationName }}Request = typeof {{ properCase operationName }}RequestSchema.static;
 
-const {{ properCase operationName }}ResponseSchema = Type.Object(
-  {
-    id: Type.Number({
-      description: "Define your response body here",
-    }),
-  },
-  { $id: "{{ properCase operationName }}Response" },
-);
+const {{ properCase operationName }}ResponseSchema = t.Object({
+  id: t.Number({
+    description: "Define your response body here",
+  }),
+});
 
-export type {{ properCase operationName }}Response = Static<typeof {{ properCase operationName }}ResponseSchema>;
+export type {{ properCase operationName }}Response = typeof {{ properCase operationName }}ResponseSchema.static;
 
-export async function {{ operationName }}Route(fastify: FastifyInstance) {
-  fastify.addSchema({{ properCase operationName }}RequestSchema);
-  fastify.addSchema({{ properCase operationName }}ResponseSchema);
+export const {{ operationName }}Route = new Elysia()
+  .use(contextPlugin)
+  .{{ lowerCase methodType }}(
+    "{{ routePath }}",
+    async ({ body, ctx, log }) => {
+      const { description } = body;
 
-  const routeOpts = {
-    schema: {
-      operationId: "{{ operationName }}",
-      tags: ["{{ routeResource }}"],
-      description: "Add your route description here",
-      body: TypeRef({{ properCase operationName }}RequestSchema),
-      response: {
-        "{{ responseCode }}": TypeRef({{ properCase operationName }}ResponseSchema),
+      const response: {{ properCase operationName }}Response = {
+        id: 1,
+      };
+
+      return response;
+    },
+    {
+      body: {{ properCase operationName }}RequestSchema,
+      response: {{ properCase operationName }}ResponseSchema,
+      detail: {
+        operationId: "{{ operationName }}",
+        tags: ["{{ routeResource }}"],
+        description: "Add your route description here",
       },
     },
-  }
-
-  fastify.{{ lowerCase methodType }}("{{ routePath }}", routeOpts, {{ operationName }}Controller);
-}
-
-export async function {{ operationName }}Controller(
-  request: FastifyRequest<{
-    Body: {{ properCase operationName }}Request;
-  }>,
-  reply: FastifyReply,
-) {
-  const { description } = request.body;
-
-  const response: {{ properCase operationName }}Response = {
-    id: 1,
-  };
-
-  reply.status({{ responseCode }}).send(response);
-}
+  );

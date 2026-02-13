@@ -1,31 +1,22 @@
-import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
+import { elysiaLogLayer } from "@loglayer/elysia";
+import { Elysia } from "elysia";
 import type { LogLayer } from "loglayer";
+import { nanoid } from "nanoid";
 import { ApiContext } from "@/api-lib/context.js";
 import { db } from "@/db/index.js";
-import { removeQueryParametersFromPath } from "@/utils/remove-query-params.js";
+import { logger } from "@/utils/logger.js";
 
-declare module "fastify" {
-  interface FastifyRequest {
-    ctx: ApiContext;
-    userId: string;
-  }
-}
-
-async function plugin(fastify: FastifyInstance, _opts) {
-  fastify.addHook("onRequest", async (request) => {
-    if (request.url) {
-      // @ts-expect-error
-      request.log = request.log.withContext({
-        apiPath: removeQueryParametersFromPath(request.url),
-      });
-    }
-
-    request.ctx = new ApiContext({
+export const contextPlugin = new Elysia({ name: "context" })
+  .use(
+    elysiaLogLayer({
+      instance: logger,
+      requestId: () => nanoid(12),
+    }),
+  )
+  .resolve(({ log }) => ({
+    ctx: new ApiContext({
       db,
-      log: request.log as unknown as LogLayer,
-    });
-  });
-}
-
-export const contextPlugin = fp(plugin);
+      log: log as unknown as LogLayer,
+    }),
+  }))
+  .as("global");

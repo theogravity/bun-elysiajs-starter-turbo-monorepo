@@ -1,23 +1,24 @@
 import { faker } from "@faker-js/faker";
 import { describe, expect, it } from "vitest";
-import { testFramework } from "../../../test-utils/test-framework.js";
-import { testFastify } from "../../../test-utils/test-server.js";
-import type { {{ properCase operationName }}Response } from "../create-email-user.route.js";
+import { testFramework } from "../../../test-utils/test-framework/index.js";
+import { testApi } from "../../../test-utils/test-server.js";
+import type { {{ properCase operationName }}Response } from "../{{ dashCase operationName }}.route.js";
 {{#ifEquals methodType "GET" }}{{set "responseCode" 200 }}{{/ifEquals}}{{#ifEquals methodType "POST" }}{{set "responseCode" 200 }}{{/ifEquals}}{{#ifEquals methodType "PUT" }}{{set "responseCode" 201 }}{{/ifEquals}}{{#ifEquals methodType "DELETE" }}{{set "responseCode" 204 }}{{/ifEquals}}
 
 describe("{{ properCase operationName }} {{ methodType }} API", () => {
   it("should test the endpoint", async () => {
     const facets = await testFramework.generateTestFacets()
-    const response = await testFastify.inject({
-      method: "{{ methodType }}",
-      url: "/{{ routeResource }}/{{ operationName }}",
-      payload: {
+
+    const { data, status } = await testApi.{{ routeResource }}["{{ routePath }}"].{{ lowerCase methodType }}(
+      {
         description: faker.lorem.sentence(),
       },
-      headers: {},
-      expectedStatusCode: {{ responseCode }},
-    });
+      {
+        headers: facets.headers,
+      },
+    );
 
-    expect(response.json<{{ properCase operationName }}Response>().id).toBeDefined();
+    expect(status).toBe({{ responseCode }});
+    expect(data).toBeDefined();
   });
 });

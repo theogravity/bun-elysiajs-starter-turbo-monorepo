@@ -29,7 +29,7 @@ export function apiRouteGenerator(plop: PlopTypes.NodePlopAPI) {
     actions: [
       {
         type: "add",
-        path: "{{ turbo.paths.root }}/apps/backend/src/api/{{routeResource}}/{{ dashCase operationName }}.ts",
+        path: "{{ turbo.paths.root }}/apps/backend/src/api/{{routeResource}}/{{ dashCase operationName }}.route.ts",
         templateFile: "templates/api-route/operation.hbs",
       },
       {
@@ -43,19 +43,19 @@ export function apiRouteGenerator(plop: PlopTypes.NodePlopAPI) {
         type: "append",
         pattern: "route-imports",
         path: "{{ turbo.paths.root }}/apps/backend/src/api/{{routeResource}}/index.ts",
-        template: `import { {{ operationName }}Route } from "./{{ dashCase operationName }}";`,
+        template: `import { {{ operationName }}Route } from "./{{ dashCase operationName }}.route";`,
       },
       {
         type: "append",
         pattern: "route-register",
         path: "{{ turbo.paths.root }}/apps/backend/src/api/{{routeResource}}/index.ts",
-        template: "  fastify.register({{ operationName }}Route);",
+        template: "  .use({{ operationName }}Route)",
       },
       {
         type: "append",
         pattern: "resource-imports",
         path: "{{ turbo.paths.root }}/apps/backend/src/api/routes.ts",
-        template: 'import { register{{ properCase routeResource }}Routes } from "./{{routeResource}}";',
+        template: 'import { {{ routeResource }}Routes } from "@/api/{{routeResource}}/index.js";',
         unique: true,
       },
       // There's some kind of bug where unique: true
@@ -65,7 +65,7 @@ export function apiRouteGenerator(plop: PlopTypes.NodePlopAPI) {
         type: "modify",
         path: "{{ turbo.paths.root }}/apps/backend/src/api/routes.ts",
         transform: (fileContent, data) => {
-          const templateString = `  fastify.register(register${plop.renderString("{{ properCase routeResource }}", data)}Routes);`;
+          const templateString = `  .use(${plop.renderString("{{ routeResource }}", data)}Routes)`;
           if (fileContent.includes(templateString)) {
             return fileContent; // If template string already exists, return unchanged content
           }

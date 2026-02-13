@@ -5,17 +5,13 @@
     "clean": {},
     "build": {
       "dependsOn": ["@internal/backend#build"],
-      "inputs": ["*.json", "*.ts", "src/**", "openapi.yml"],
+      "inputs": ["*.json", "*.ts", "src/**"],
       "outputs": ["dist/**"]
     },
     "build:dev": {
-      "dependsOn": ["@internal/backend#generate"],
-      "inputs": ["*.json", "*.ts", "src/**", "openapi.yml"],
+      "dependsOn": ["@internal/backend#build"],
+      "inputs": ["*.json", "*.ts", "src/**"],
       "outputs": ["dist/**"]
-    },
-    "build:client": {
-      "inputs": ["*.json", "openapi.yml"],
-      "outputs": ["src/generated/**"]
     },
     "verify-types": {
       "inputs": ["*.ts", "*.json", "src/**"]

@@ -1,27 +1,19 @@
 import { ApiError, BackendErrorCodes, createApiError } from "@internal/backend-errors";
 import { IS_PROD } from "@/constants.js";
-import { removeQueryParametersFromPath } from "@/utils/remove-query-params.js";
+import { getLogger } from "@/utils/logger.js";
 
-export function errorHandler(error: any, request, reply) {
-  if (request.url) {
-    request.log.withContext({
-      apiPath: removeQueryParametersFromPath(request.url),
-    });
-  }
+export function errorHandler(ctx: any) {
+  const { error, set, code } = ctx;
+  const log = getLogger();
 
   if (error instanceof ApiError) {
-    error.reqId = request.id;
-
-    // If the error is not supposed to be logged, don't log it
-    // Usually doNotLog = true means that the error has already been logged elsewhere
     if (!error.doNotLog) {
-      request.log
+      log
         .withContext({
           errId: error.errId,
-          reqId: error.reqId,
         })
         .errorOnly(error, {
-          logLevel: error.logLevel,
+          logLevel: error.logLevel as any,
         });
     }
 
@@ -37,44 +29,42 @@ export function errorHandler(error: any, request, reply) {
       });
 
       e.errId = error.errId;
-      e.reqId = request.id;
 
-      reply.status(e.statusCode).send(IS_PROD ? e.toJSONSafe() : e.toJSON());
-    } else {
-      reply.status(error.statusCode).send(IS_PROD ? error.toJSONSafe() : error.toJSON());
+      set.status = e.statusCode;
+      return IS_PROD ? e.toJSONSafe() : e.toJSON();
     }
-    // https://github.com/fastify/fastify/blob/main/docs/Reference/Errors.md
-  } else if (error?.code === "FST_ERR_VALIDATION") {
+
+    set.status = error.statusCode;
+    return IS_PROD ? error.toJSONSafe() : error.toJSON();
+  }
+
+  if (code === "VALIDATION") {
     const e = createApiError({
       code: BackendErrorCodes.INPUT_VALIDATION_ERROR,
       validationError: {
-        validation: error.validation,
-        validationContext: error.validationContext,
-        message: error.message,
+        validation: error?.all ?? [],
+        validationContext: "body",
+        message: error?.message ?? "Validation error",
       },
       causedBy: error,
     });
 
-    e.reqId = request.id;
-
-    reply.status(e.statusCode).send(IS_PROD ? e.toJSONSafe() : e.toJSON());
-    // https://github.com/fastify/fastify-jwt?tab=readme-ov-file#error-code
-  } else {
-    const e = createApiError({
-      code: BackendErrorCodes.INTERNAL_SERVER_ERROR,
-      message: "An internal server error occurred.",
-      causedBy: error,
-    });
-
-    e.reqId = request.id;
-
-    request.log
-      .withContext({
-        errId: e.errId,
-        reqId: e.reqId,
-      })
-      .errorOnly(error);
-
-    reply.status(500).send(IS_PROD ? e.toJSONSafe() : e.toJSON());
+    set.status = e.statusCode;
+    return IS_PROD ? e.toJSONSafe() : e.toJSON();
   }
+
+  const e = createApiError({
+    code: BackendErrorCodes.INTERNAL_SERVER_ERROR,
+    message: "An internal server error occurred.",
+    causedBy: error,
+  });
+
+  log
+    .withContext({
+      errId: e.errId,
+    })
+    .errorOnly(error);
+
+  set.status = 500;
+  return IS_PROD ? e.toJSONSafe() : e.toJSON();
 }

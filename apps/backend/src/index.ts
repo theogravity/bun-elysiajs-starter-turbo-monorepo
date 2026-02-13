@@ -2,6 +2,8 @@ import { SERVER_PORT } from "@/constants.js";
 import { startServer } from "@/server.js";
 import { getLogger } from "@/utils/logger.js";
 
+export type { App } from "@/server.js";
+
 process.on("unhandledRejection", (reason, promise) => {
   const log = getLogger().withPrefix("[Unhandled Rejection]");
   log

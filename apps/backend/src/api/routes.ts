@@ -1,15 +1,12 @@
-import type { FastifyInstance } from "fastify";
+import { Elysia } from "elysia";
+import { apiModels } from "@/api-lib/types/index.js";
 
 // Do not remove this comment: resource-imports
 
-import { registerUserRoutes } from "@/api/users/index.js";
+import { userRoutes } from "@/api/users/index.js";
 
-export async function registerResourceRoutes(fastify: FastifyInstance, _opts) {
-  fastify.register(routes, { prefix: "/" });
-}
-
-async function routes(fastify: FastifyInstance) {
+export const routes = new Elysia()
+  .use(apiModels)
   // Do not remove this comment: resource-register
 
-  fastify.register(registerUserRoutes);
-}
+  .use(userRoutes);
