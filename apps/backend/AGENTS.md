@@ -1,6 +1,6 @@
 # Backend AGENTS.md
 
-Backend-specific documentation for the Fastify API server.
+Backend-specific documentation for the ElysiaJS API server.
 
 ## URLs
 
@@ -33,19 +33,13 @@ bun run db:migrate:latest  # Run all pending migrations
 bun run db:migrate:undo    # Rollback last migration
 ```
 
-### OpenAPI Generation
-
-```bash
-bun run generate           # Generate OpenAPI schema (outputs to packages/backend-client/openapi.yml)
-```
-
 ## Code Generation (Scaffolding)
 
 Run `turbo gen` from the repo root to access these generators.
 
 ### 1. API Route (`api:route`)
 
-Creates a complete REST endpoint with route, schema, controller, and tests.
+Creates a complete REST endpoint with route, schema, and tests.
 
 **Prompts:**
 1. Resource folder name (plural, e.g., "users")
@@ -54,7 +48,7 @@ Creates a complete REST endpoint with route, schema, controller, and tests.
 4. Operation name (e.g., "createUser")
 
 **Generated files:**
-- `src/api/{resource}/{operation-name}.ts` - Route and controller
+- `src/api/{resource}/{operation-name}.route.ts` - Route with schema and handler
 - `src/api/{resource}/__tests__/{operation-name}.test.ts` - Test file
 - Updates `src/api/{resource}/index.ts` and `src/api/routes.ts`
 
@@ -91,50 +85,78 @@ Routes are organized by resource in `src/api/{resource}/`:
 ```
 src/api/
 ├── users/
-│   ├── index.ts                      # Registers all user routes
-│   ├── create-email-user.ts          # POST /users/email
-│   ├── get-user-by-id.ts             # GET /users/:id
+│   ├── index.ts                          # Elysia plugin registering all user routes
+│   ├── create-email-user.route.ts        # POST /users/email
 │   └── __tests__/
-│       ├── create-email-user.test.ts
-│       └── get-user-by-id.test.ts
-├── health/
-│   └── ...
-└── routes.ts                         # Main router registering all resources
+│       └── create-email-user.route.test.ts
+└── routes.ts                             # Main router registering all resources
 ```
 
 ### Route File Structure
 
-Each route file contains:
-
-1. **Request/Response schemas** using TypeBox
-2. **Route registration function** that registers schemas and the route
-3. **Controller function** with the business logic
-
-Example:
+Each route file exports an Elysia instance with schemas and a handler:
 
 ```typescript
-// Schema definitions
-const CreateUserRequestSchema = Type.Object({
-  $id: "CreateUserRequest",
-  // ... fields
+import { Elysia, t } from "elysia";
+import { contextPlugin } from "@/plugins/context.plugin.js";
+
+const CreateUserRequestSchema = t.Object({
+  // ... fields with validation
 });
-const CreateUserResponseSchema = Type.Object({
-  $id: "CreateUserResponse",
+
+const CreateUserResponseSchema = t.Object({
   // ... fields
 });
 
-// Route registration
-export async function createUserRoute(fastify: FastifyInstance) {
-  fastify.addSchema(CreateUserRequestSchema);
-  fastify.addSchema(CreateUserResponseSchema);
-  fastify.post("/users", routeOpts, createUserController);
-}
+export const createUserRoute = new Elysia()
+  .use(contextPlugin)
+  .post(
+    "/",
+    async ({ body, ctx, log }) => {
+      // Handler logic - return response directly
+      return { id: "..." };
+    },
+    {
+      body: CreateUserRequestSchema,
+      response: CreateUserResponseSchema,
+      detail: {
+        operationId: "createUser",
+        tags: ["user"],
+        description: "Create a user",
+      },
+    },
+  );
+```
 
-// Controller
-export async function createUserController(request, reply) {
-  const { repositories, services } = request.ctx;
-  // Implementation
-}
+Key differences from the Fastify pattern:
+- Routes are Elysia instances, not async functions
+- `.use(contextPlugin)` is required for `ctx` and `log` type access
+- The contextPlugin is a singleton — safe to `.use()` in multiple files
+- Handlers return the response directly (no `reply.send()`)
+- OpenAPI metadata goes in the `detail` field
+- Schemas use `t` from `elysia` (TypeBox-based)
+
+### Resource Registration
+
+Resource index files (`src/api/users/index.ts`) group routes with a prefix:
+
+```typescript
+import { Elysia } from "elysia";
+import { createUserRoute } from "./create-user.route.js";
+
+export const userRoutes = new Elysia({ prefix: "/users" })
+  .use(createUserRoute);
+```
+
+The main router (`src/api/routes.ts`) aggregates all resources:
+
+```typescript
+import { Elysia } from "elysia";
+import { userRoutes } from "./users/index.js";
+
+export const routes = new Elysia()
+  .use(apiModels)
+  .use(userRoutes);
 ```
 
 ### Service Layer
@@ -149,7 +171,7 @@ export class UserProfilesService extends BaseService {
 }
 ```
 
-Access via `request.ctx.services.userProfiles`.
+Access via `ctx.services.userProfiles` in route handlers.
 
 ### Repository Layer
 
@@ -162,15 +184,15 @@ export class UsersRepository extends BaseRepository {
 }
 ```
 
-Access via `request.ctx.repositories.users`.
-
 ### Context Injection
 
-The request context (`src/api-lib/context.ts`) provides:
+The `contextPlugin` (`src/plugins/context.plugin.ts`) uses `@loglayer/elysia` for request-scoped logging and `.resolve()` to provide an `ApiContext` per request containing:
 - Database instance
 - All repositories
 - All services
-- Logger
+- Request-scoped logger
+
+The plugin uses `.as("global")` to propagate types to all consumers.
 
 ## Testing
 
@@ -201,31 +223,26 @@ After tests complete, containers are stopped and cleaned up.
 
 All test utilities are in `src/test-utils/` and imported via `@/test-utils`.
 
-#### `testFastify` - HTTP Testing
+#### `testApi` - Eden Treaty Testing
 
-A pre-configured Fastify instance for making HTTP requests in tests. It wraps Fastify's `inject()` method with additional features:
+A pre-configured Eden Treaty client for making type-safe API calls in tests. It wraps the Elysia app instance directly (no network calls):
 
 ```typescript
-import { testFastify } from "@/test-utils/test-server";
+import { testApi } from "@/test-utils/test-server";
 
-const response = await testFastify.inject({
-  method: "POST",
-  url: "/users/email",
-  payload: { email: "test@example.com", password: "pass123" },
-  headers,
-  expectedStatusCode: 200,  // Fails test if status doesn't match
-});
+const { data, error, status } = await testApi.users.email.post(
+  {
+    email: "test@example.com",
+    password: "pass123",
+    givenName: "Test",
+    familyName: "User",
+  },
+  { headers },
+);
+
+expect(status).toBe(200);
+expect(data?.user.id).toBeDefined();
 ```
-
-**Custom options:**
-- `expectedStatusCode` (default: `200`) - Expected HTTP status. Test fails if response doesn't match, and logs the full request/response for debugging.
-- `disableExpectedStatusCodeCheck` - Set to `true` to skip status code validation.
-
-When a request fails the status check, the test server automatically logs:
-- The full request (method, URL, payload, headers)
-- The full response body
-
-This makes debugging failed tests much easier.
 
 #### `testFramework` - Test Data Generation
 
@@ -258,7 +275,7 @@ Tests use special `test-` prefixed headers for mocking authentication:
 
 | Header | Purpose |
 |--------|---------|
-| `test-user-id` | Sets `request.userId` to simulate authenticated user |
+| `test-user-id` | Sets `userId` to simulate authenticated user |
 | `test-logging-enabled` | Set to `"true"` to enable server logging for this request |
 
 These headers are processed by test plugins (`src/test-utils/plugins/`) and are only available in the test environment.
@@ -267,17 +284,11 @@ These headers are processed by test plugins (`src/test-utils/plugins/`) and are 
 
 By default, server-side logging is disabled during tests to reduce noise. Enable it when debugging:
 
-**Option 1: Via `generateTestFacets`**
+**Via `generateTestFacets`:**
 ```typescript
 const { headers } = await testFramework.generateTestFacets({
   withLogging: true,
 });
-```
-
-**Option 2: In endpoint code**
-```typescript
-// Inside a controller
-request.log.enableLogging();
 ```
 
 ### Writing Tests
@@ -287,11 +298,9 @@ request.log.enableLogging();
 Tests live in `__tests__/` directories alongside the code they test:
 ```
 src/api/users/
-├── create-email-user.ts
-├── get-user-by-id.ts
+├── create-email-user.route.ts
 └── __tests__/
-    ├── create-email-user.test.ts
-    └── get-user-by-id.test.ts
+    └── create-email-user.route.test.ts
 ```
 
 #### Complete Example
@@ -300,8 +309,7 @@ src/api/users/
 import { faker } from "@faker-js/faker";
 import { describe, expect, it } from "vitest";
 import { testFramework } from "@/test-utils/test-framework";
-import { testFastify } from "@/test-utils/test-server";
-import type { CreateEMailUserResponse } from "../create-email-user.route";
+import { testApi } from "@/test-utils/test-server";
 
 describe("Create e-mail user API", () => {
   it("should create an e-mail user", async () => {
@@ -309,37 +317,18 @@ describe("Create e-mail user API", () => {
       withLogging: true,
     });
 
-    const response = await testFastify.inject({
-      method: "POST",
-      url: "/users/email",
-      payload: {
+    const { data, status } = await testApi.users.email.post(
+      {
         givenName: faker.person.firstName(),
         familyName: faker.person.lastName(),
         email: faker.internet.email(),
         password: faker.internet.password(),
       },
-      expectedStatusCode: 200,
-      headers,
-    });
+      { headers },
+    );
 
-    expect(response.json<CreateEMailUserResponse>().user.id).toBeDefined();
-  });
-
-  it("should return 400 for invalid email", async () => {
-    const { headers } = await testFramework.generateTestFacets();
-
-    await testFastify.inject({
-      method: "POST",
-      url: "/users/email",
-      payload: {
-        givenName: "John",
-        familyName: "Doe",
-        email: "not-an-email",
-        password: "password123",
-      },
-      expectedStatusCode: 400,
-      headers,
-    });
+    expect(status).toBe(200);
+    expect(data?.user.id).toBeDefined();
   });
 });
 ```
@@ -349,3 +338,4 @@ describe("Create e-mail user API", () => {
 - **`@faker-js/faker`** - Generate realistic test data (names, emails, etc.)
 - **`vitest`** - Test runner, assertions (`describe`, `it`, `expect`, `beforeAll`, `afterAll`)
 - **`testcontainers`** - Docker-based test infrastructure
+- **`@elysiajs/eden`** - Eden Treaty client for type-safe API testing

@@ -4,18 +4,18 @@ This document describes how this project works and how to perform common operati
 
 ## Project Overview
 
-This is a **Bun-powered TypeScript monorepo** using Turborepo for orchestration. It contains a Fastify API backend with auto-generated TypeScript client SDK.
+This is a **Bun-powered TypeScript monorepo** using Turborepo for orchestration. It contains an ElysiaJS API backend with a type-safe Eden Treaty client SDK.
 
 ### Directory Structure
 
 ```
-fastify-starter-turbo-monorepo/
+elysiajs-starter-turbo-monorepo/
 ├── apps/
-│   └── backend/                    # Fastify API server
+│   └── backend/                    # ElysiaJS API server
 ├── packages/
 │   ├── tsconfig/                   # Shared TypeScript configuration
 │   ├── backend-errors/             # Error handling package
-│   └── backend-client/             # Generated TypeScript client SDK
+│   └── backend-client/             # Eden Treaty client SDK
 ├── turbo.json                      # Turbo task configuration
 ├── package.json                    # Root workspace definition
 ├── biome.json                      # Linting and formatting
@@ -25,9 +25,12 @@ fastify-starter-turbo-monorepo/
 ### Technology Stack
 
 - **Runtime**: Bun (>= 1.0.0)
-- **Framework**: Fastify v5
+- **Framework**: ElysiaJS
 - **Database**: PostgreSQL with Kysely (type-safe query builder)
-- **Validation**: TypeBox (generates OpenAPI schemas)
+- **Validation**: Elysia's `t` module (TypeBox-based, generates OpenAPI schemas)
+- **Logging**: LogLayer + @loglayer/elysia (request-scoped logging)
+- **API Docs**: @elysiajs/openapi (Scalar UI at /docs)
+- **Client SDK**: Eden Treaty (type-safe, no code generation)
 - **Testing**: Vitest + Testcontainers
 - **Linting/Formatting**: Biome
 - **Monorepo**: Turborepo + Bun workspaces
@@ -88,7 +91,7 @@ The Turbo pipeline ensures correct build order:
 
 1. `@internal/backend-errors` builds first
 2. `@internal/backend` depends on backend-errors
-3. `@internal/backend-client` depends on backend's OpenAPI generation
+3. `@internal/backend-client` depends on backend build (imports the `App` type)
 
 For development, `build:dev` tasks use `hash-runner` for incremental builds.
 

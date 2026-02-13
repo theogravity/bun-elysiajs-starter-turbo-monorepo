@@ -1,6 +1,6 @@
-# Bun Fastify Turbo Monorepo Starter
+# Bun ElysiaJS Turbo Monorepo Starter
 
-A starter project for building an API server using **Bun**, Typescript, Fastify v5, and Kysely with Postgres.
+A starter project for building an API server using **Bun**, Typescript, ElysiaJS, and Kysely with Postgres.
 
 > **This project uses [Bun](https://bun.sh/) as its runtime and package manager.** Bun provides faster installs, native TypeScript execution, and improved performance over Node.js.
 
@@ -12,12 +12,12 @@ A starter project for building an API server using **Bun**, Typescript, Fastify 
 ## Features
 
 - **Bun-powered** - Uses Bun for package management, script execution, and runtime.
-- Fastify v5 with Typescript.
+- ElysiaJS with Typescript.
 - Monorepo setup using [`turbo`](https://turbo.build/) and [Bun workspaces](https://bun.sh/docs/install/workspaces).
-- Outputs OpenAPI schema for the API and has a web UI for viewing it.
+- OpenAPI docs via Scalar UI at `/docs`.
+- Type-safe client SDK via Eden Treaty.
 - A sample REST test is included using Vitest.
 - Sample database migrations / repositories are included using Kysely.
-- An client SDK package is included to generate typescript client code from the API schema.
 - An error handler package is included to handle errors and return a consistent response.
 - Code generators using `turbo gen` to create new API endpoints and database tables.
 
@@ -27,16 +27,17 @@ A starter project for building an API server using **Bun**, Typescript, Fastify 
 - [`bun`](https://bun.sh/) for package management and runtime
 - [`commitlint`](https://commitlint.js.org/) for commit message linting
 - [`turbo`](https://turbo.build/) for monorepo management
-- [`fastify`](https://www.fastify.io/) for the API server framework
+- [`elysia`](https://elysiajs.com/) for the API server framework
+- [`@elysiajs/openapi`](https://elysiajs.com/plugins/openapi) for OpenAPI docs (Scalar UI)
+- [`@elysiajs/eden`](https://elysiajs.com/eden/overview) for type-safe API client (Eden Treaty)
 - [`hash-runner`](https://github.com/theogravity/hash-runner) for caching builds
 - [`kysely`](https://kysely.dev/) for the database query builder
 - [`postgres`](https://www.postgresql.org/) + pgAdmin for the database
 - [`testcontainers`](https://www.testcontainers.org/) for testing with a sandboxed postgres instance
 - [`vitest`](https://vitest.dev/) for endpoint testing
-- [`loglayer`](https://github.com/theogravity/loglayer) for formatted logging
+- [`loglayer`](https://github.com/theogravity/loglayer) + [`@loglayer/elysia`](https://loglayer.dev/integrations/elysia) for request-scoped logging
 - [`biome`](https://biomejs.dev/) for linting and formatting
 - [`syncpack`](https://jamiemason.github.io/syncpack/) for keeping package versions in sync
-- [`Hey API`](https://heyapi.vercel.app/) for generating the backend SDK using the generated OpenAPI schema from the backend
 
 ## Setup
 
@@ -87,6 +88,23 @@ Generators for the following:
 - Database tables and repositories
 
 `turbo gen`
+
+## Using the API Client
+
+The `@internal/backend-client` package provides a type-safe Eden Treaty client:
+
+```typescript
+import { createBackendClient } from '@internal/backend-client'
+
+const api = createBackendClient('http://localhost:3080')
+
+const { data, error, status } = await api.users.email.post({
+  givenName: 'John',
+  familyName: 'Doe',
+  email: 'john@example.com',
+  password: 'securepass123',
+})
+```
 
 ## Database migrations
 
