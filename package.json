@@ -3,7 +3,10 @@
   "description": "",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "start": "turbo watch dev",
     "build": "turbo run build",
@@ -17,20 +20,20 @@
     "clean:turbo": "find . -name \".turbo\" -type d -prune -exec rm -rf '{}' +\n",
     "clean:dist": "find . -name \"dist\" -type d -prune -exec rm -rf '{}' +\n",
     "clean:hash-runner": "find . -name \".hashes.json\" -type f -delete\n",
-    "syncpack:update": "syncpack update && syncpack fix-mismatches && bun install",
+    "syncpack:update": "syncpack update && syncpack fix && bun install",
     "syncpack:format": "syncpack format",
     "syncpack:lint": "syncpack lint",
     "verify-types": "turbo run verify-types --continue --"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.13",
-    "@commitlint/cli": "20.4.0",
-    "@commitlint/config-conventional": "20.4.0",
+    "@biomejs/biome": "2.4.6",
+    "@commitlint/cli": "20.4.3",
+    "@commitlint/config-conventional": "20.4.3",
     "@internal/tsconfig": "workspace:*",
-    "@types/node": "25.1.0",
-    "lefthook": "2.0.16",
-    "syncpack": "13.0.4",
-    "turbo": "2.8.1",
+    "@types/node": "25.3.5",
+    "lefthook": "2.1.2",
+    "syncpack": "14.0.1",
+    "turbo": "2.8.14-canary.2",
     "typescript": "5.9.3"
   },
   "engineStrict": true,

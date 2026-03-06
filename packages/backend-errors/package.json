@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsdown",
     "build:dev": "hash-runner",
-    "clean": "rm -rf .turbo node_modules dist",
+    "clean": "rm -rf .turbo node_modules dist .hashes.json",
     "lint": "biome check --write --unsafe src && biome format src --write && biome lint src --fix",
     "lint:staged": "biome check --no-errors-on-unmatched --write --unsafe --staged src",
     "verify-types": "tsc --project tsconfig.json --noEmit"
@@ -29,11 +29,11 @@
   "devDependencies": {
     "@types/sprintf-js": "1.1.4",
     "@internal/tsconfig": "workspace:*",
-    "ajv": "8.17.1",
+    "ajv": "8.18.0",
     "hash-runner": "4.0.0",
-    "tsdown": "0.12.5"
+    "tsdown": "0.21.0"
   },
   "peerDependencies": {
-    "ajv": "8.17.1"
+    "ajv": "8.18.0"
   }
 }
