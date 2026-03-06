@@ -24,6 +24,6 @@ All package versions in `package.json` files must be pinned (exact versions with
 }
 ```
 
-After installing packages with `bun add`, run `bun syncpack fix-mismatches` to remove version prefixes, then `bun install` to update the lockfile.
+After installing packages with `bun add`, run `syncpack fix` to remove version prefixes, then `bun install` to update the lockfile.
 
 The pre-commit hook will fail if unpinned versions are committed.

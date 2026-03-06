@@ -1,0 +1,15 @@
+{
+  "extends": "@internal/tsconfig/tsconfig.json",
+  "include": ["src/**/*", "vite.config.ts", "vitest.config.ts"],
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    },
+    "noEmit": true
+  }
+}

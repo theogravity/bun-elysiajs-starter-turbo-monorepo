@@ -1,6 +1,6 @@
 # Development Server
 
-Start or stop the Central backend API server for local development and testing.
+Start or stop the backend API server for local development and testing.
 
 ## Usage
 
@@ -10,7 +10,7 @@ Start or stop the Central backend API server for local development and testing.
 
 ## Instructions
 
-This skill manages the Central backend API server running on port 9800.
+This skill manages the backend API server running on port 3080.
 
 ### Commands
 
@@ -24,13 +24,13 @@ This skill manages the Central backend API server running on port 9800.
    Use `run_in_background: true` for the Bash tool
 4. Wait for the server to be ready by polling the health endpoint (up to 10 seconds):
    ```bash
-   for i in {1..10}; do curl -s http://localhost:9800/health && break || sleep 1; done
+   for i in {1..10}; do curl -s http://localhost:3080/health && break || sleep 1; done
    ```
 5. Confirm the server is running and ready
 
 **stop**:
-1. Find the server process: `lsof -ti:9800`
-2. Kill the process if found: `kill $(lsof -ti:9800)`
+1. Find the server process: `lsof -ti:3080`
+2. Kill the process if found: `kill $(lsof -ti:3080)`
 3. Confirm the server has stopped
 
 **status**:
@@ -40,17 +40,13 @@ This skill manages the Central backend API server running on port 9800.
 ## Example Output
 
 ```
-Starting Central backend server...
+Starting backend server...
 Server started in background (task ID: abc123)
 Waiting for server to be ready...
-✓ Server is running at http://localhost:9800
-
-You can now run the test generator:
-  cd packages/transport-central && bun run test-generator
+✓ Server is running at http://localhost:3080
 ```
 
 ## Notes
 
-- The server runs on port 9800 by default
-- Uses an in-memory SQLite database by default
+- The server runs on port 3080 by default
 - Logs are available in the background task output

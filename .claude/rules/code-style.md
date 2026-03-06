@@ -51,10 +51,6 @@ Guidelines:
 - Use an `index.ts` only when you need to aggregate exports for external use
 - Do not re-export items that are already accessible from their original location; import directly from the source instead
 
-## UI Components (shadcn)
-
-Always check if a [shadcn/ui](https://ui.shadcn.com/docs/components) component exists before building custom UI. Install with `bunx shadcn@latest add <component>`, then run `bun syncpack fix-mismatches && bun install` to pin dependency versions.
-
 ## React Component Organization
 
 Route files and large components should be thin orchestrators. When a route component grows beyond ~200 lines, extract concerns into separate modules:
@@ -155,9 +151,8 @@ server.registerTool("my_tool", {
 
 All Elysia `t` schema properties in API routes must include a `description` field. These descriptions are used to generate OpenAPI documentation and appear in the auto-generated client SDK.
 
-Use `import { t } from "elysia"` — do NOT import `Type` from `@sinclair/typebox` directly.
+Use `import { t } from "elysia"` for all schema definitions.
 
-**Do this:**
 ```typescript
 import { t } from "elysia";
 
@@ -176,15 +171,6 @@ const QueryParamsSchema = t.Object({
 const ResponseSchema = t.Object({
   logs: t.Array(LogSchema, { description: "List of log entries" }),
   total: t.Number({ description: "Total count of matching logs" }),
-});
-```
-
-**Not this:**
-```typescript
-// Wrong: using @sinclair/typebox directly
-import { Type } from "@sinclair/typebox";
-const QueryParamsSchema = Type.Object({
-  limit: Type.Optional(Type.Number({ default: 100 })),  // Wrong import + no description
 });
 ```
 
