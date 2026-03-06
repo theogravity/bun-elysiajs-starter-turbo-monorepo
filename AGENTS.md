@@ -4,14 +4,15 @@ This document describes how this project works and how to perform common operati
 
 ## Project Overview
 
-This is a **Bun-powered TypeScript monorepo** using Turborepo for orchestration. It contains an ElysiaJS API backend with a type-safe Eden Treaty client SDK.
+This is a **Bun-powered TypeScript monorepo** using Turborepo for orchestration. It contains an ElysiaJS API backend, a React frontend, and a type-safe Eden Treaty client SDK.
 
 ### Directory Structure
 
 ```
-elysiajs-starter-turbo-monorepo/
+bun-elysiajs-starter-turbo-monorepo/
 ├── apps/
-│   └── backend/                    # ElysiaJS API server
+│   ├── backend/                    # ElysiaJS API server
+│   └── frontend/                   # React frontend (Vite, TanStack Router, TanStack Query, Tailwind CSS)
 ├── packages/
 │   ├── tsconfig/                   # Shared TypeScript configuration
 │   ├── backend-errors/             # Error handling package
@@ -25,7 +26,8 @@ elysiajs-starter-turbo-monorepo/
 ### Technology Stack
 
 - **Runtime**: Bun (>= 1.0.0)
-- **Framework**: ElysiaJS
+- **Backend Framework**: ElysiaJS
+- **Frontend**: React 19, Vite, TanStack Router, TanStack Query, Tailwind CSS
 - **Database**: PostgreSQL with Kysely (type-safe query builder)
 - **Validation**: Elysia's `t` module (TypeBox-based, generates OpenAPI schemas)
 - **Logging**: LogLayer + @loglayer/elysia (request-scoped logging)
@@ -48,7 +50,6 @@ turbo watch dev            # Same as above
 
 ```bash
 turbo build                # Build all packages
-turbo run build            # Same as above
 ```
 
 ### Testing
@@ -91,9 +92,10 @@ The Turbo pipeline ensures correct build order:
 
 1. `@internal/backend-errors` builds first
 2. `@internal/backend` depends on backend-errors
-3. `@internal/backend-client` depends on backend build (imports the `App` type)
+3. `@internal/backend-client` depends on backend (imports the `App` type for Eden Treaty)
+4. `apps/frontend` depends on backend-client
 
-For development, `build:dev` tasks use `hash-runner` for incremental builds.
+For development, `build:dev` tasks use `hash-runner` for incremental builds — only rebuilding when source inputs change.
 
 ## Package Synchronization
 
