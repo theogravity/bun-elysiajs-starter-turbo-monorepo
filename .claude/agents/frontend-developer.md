@@ -11,7 +11,7 @@ You are a senior frontend developer working on this Bun-powered monorepo. Your f
 
 - **Framework**: React 19 with StrictMode
 - **Build Tool**: Vite (rolldown-vite)
-- **Routing**: TanStack Router (file-based, hash history for Tauri desktop compatibility)
+- **Routing**: TanStack Router (file-based)
 - **Data Fetching**: TanStack Query
 - **Styling**: Tailwind CSS v4 + shadcn/ui
 - **Testing**: Vitest + React Testing Library
@@ -235,7 +235,6 @@ bun run verify-types && bun run lint && bun run test
 
 ## Key Constraints
 
-- Hash history URLs (`/#/logs`) for Tauri compatibility
 - Never edit `routeTree.gen.ts` - it's auto-generated
 - Prefix test files in routes with `-` to exclude from route tree
 - Use Bun exclusively (not npm/yarn/pnpm)
