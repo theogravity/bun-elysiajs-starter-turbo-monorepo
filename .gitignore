@@ -129,4 +129,5 @@ dist
 .pnp.*
 .idea/
 .turbo/
+.tanstack/
 .hashes.json
