@@ -1,33 +1,48 @@
 # Security Context
 
-This is a **local-only service** designed to run on a developer's machine or within a trusted local network.
+This is a **starter template**, not a finished service. The security posture below
+describes what the template currently ships, not a set of decisions to preserve.
+Anything built on it is expected to add what it needs.
 
-## Authentication
+Do not read the gaps here as deliberate. If a task involves an endpoint that
+handles real data, treat authentication and authorization as part of the work, or
+say explicitly that you are leaving them out.
 
-No authentication is required. The API endpoints are intentionally open for local development tooling and log aggregation.
+## What the template ships today
 
-## CORS
+| Concern | State |
+|---------|-------|
+| Authentication | **None.** No route checks identity. There is no session, token, or API key handling anywhere in `src/api/`. |
+| Authorization | **None.** No ownership or role checks. |
+| CORS | Fully permissive — `cors()` in `src/server.ts` is called with no configuration, so any origin is allowed. |
+| Rate limiting | None. |
+| Transport | Plain HTTP locally. No HTTPS enforcement or HSTS. |
+| Input validation | Present. Every route validates through an Elysia `t` schema, and unvalidated input cannot reach a handler. |
+| SQL injection | Not a concern. Kysely parameterizes every query, and no raw SQL is interpolated from user input. |
+| Password storage | bcrypt, cost factor 12, in the example user service. |
+| Error responses | Safe in production. `IS_PROD` switches serialization to `toJSONSafe()`, which omits the stack, `causedBy`, and unsafe `metadata`. Non-production responses deliberately include them. |
 
-Permissive CORS is acceptable since the service is not exposed to the public internet.
+## The test authentication mock
 
-## Rate Limiting
+`src/test-utils/plugins/test-headers.plugin.ts` derives `userId` from a
+`test-user-id` request header. That is a fixture for tests, not an auth system.
 
-No rate limiting is implemented. This is intentional for a local service where performance and simplicity are prioritized over protection from abuse.
+It is **not** reachable in production: `createApp()` in `src/server.ts` does not
+use it. Only `testApp` in `src/test-utils/test-server.ts` composes it in. Keep it
+that way — never add `testPlugins` to `createApp()`, and never build real
+authorization on top of a client-supplied `userId` header.
 
-## Input Validation
+## Adding authentication
 
-The following design decisions are intentional for a local development service:
+Do it as an Elysia plugin in `src/plugins/`, following `contextPlugin`: a named
+instance using `.resolve()` (or `.macro()` for per-route opt-in) so the resolved
+identity is typed on the handler context. Reject with the existing error contract
+— `ACCESS_DENIED` (403) or `INVALID_CREDENTIALS` (401) — so failures keep the same
+response shape as everything else. See the error handling section of
+`apps/backend/AGENTS.md`.
 
-- **No string length limits on log fields**: Log messages, stack traces, and metadata can vary significantly in size. Limiting them would break legitimate use cases.
-- **No limits on distinct value queries**: Services like `getDistinctServices()` return all values without pagination. For local development, the number of unique services/instances is expected to be small.
-- **Configurable batch ingestion limit**: Batch size is limited by `MAX_BATCH_SIZE` config to prevent accidental resource exhaustion while still allowing flexibility.
+## Before deploying anywhere shared
 
-## When This Changes
-
-If this service is ever deployed to a shared or public environment, the following must be implemented:
-- Authentication (API keys or OAuth)
-- Proper CORS origin validation
-- Rate limiting
-- HTTPS enforcement
-- Input length validation
-- Pagination for all list endpoints
+Authentication and authorization; CORS restricted to known origins; rate limiting;
+HTTPS enforcement; a secrets story that is not `.env` on disk; and a review of
+whether any endpoint returns more than the caller should see.

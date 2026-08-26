@@ -430,6 +430,13 @@ variable still fails, with a message naming the variable and pointing at
 Every `db:migrate:*` command loads this module too, so all three need the
 variables set even though `create` writes no SQL.
 
+To add a variable, export it from `src/constants.ts` and add it to `.env.example`
+and to the table above. Use the local `required()` helper for anything mandatory —
+it reports a missing variable by name and points at `.env.example`, rather than
+surfacing a bare `EnvVarError`. Optional variables use `env.get(...).default(...)`
+directly. Read them at module scope, never inside a handler, so a misconfigured
+deployment fails at boot instead of on the first request.
+
 ## Adding a feature end-to-end
 
 There is no code generator — create the files directly, working from the database

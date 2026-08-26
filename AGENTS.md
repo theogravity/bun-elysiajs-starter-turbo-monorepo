@@ -188,6 +188,76 @@ see that, or the type `"Please install Elysia before using Eden"`, run
 
 For development, `build:dev` uses `hash-runner` for incremental rebuilds.
 
+## Adding a package to the monorepo
+
+Workspaces are `apps/*` and `packages/*`. A new package needs five things, and
+Turbo will silently skip tasks it cannot see, so none of them are optional.
+
+**1. `packages/{name}/package.json`** — name it `@internal/{name}`, mark it
+`private`, and point the entry fields at `dist/`. Copy the shape from
+`packages/backend-errors/package.json`:
+
+```json
+{
+  "name": "@internal/thing",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsdown",
+    "build:dev": "hash-runner",
+    "clean": "rm -rf .turbo node_modules dist .hashes.json",
+    "lint": "biome check --no-errors-on-unmatched --write --unsafe src",
+    "lint:staged": "biome check --no-errors-on-unmatched --write --unsafe --staged src",
+    "verify-types": "tsc --project tsconfig.json --noEmit"
+  }
+}
+```
+
+Every dependency version must be exact — no `^` or `~`. The pre-commit hook
+rejects unpinned versions.
+
+**2. `packages/{name}/tsconfig.json`** — extend the shared config:
+
+```json
+{
+  "extends": "@internal/tsconfig/tsconfig.json",
+  "include": ["./src/**/*"]
+}
+```
+
+**3. `packages/{name}/turbo.json`** — inherit the root pipeline and declare task
+inputs and outputs, or Turbo will cache incorrectly:
+
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "clean": {},
+    "build": { "dependsOn": ["lint"], "inputs": ["*.json", "*.ts", "src/**"], "outputs": ["dist/**"] },
+    "build:dev": { "inputs": ["*.json", "*.ts", "src/**"], "outputs": ["dist/**"] },
+    "lint": { "inputs": ["*.ts", "*.json", "src/**"] },
+    "verify-types": { "inputs": ["*.ts", "*.json", "src/**"] }
+  }
+}
+```
+
+**4. `packages/{name}/tsdown.config.ts`** — copy
+`packages/backend-errors/tsdown.config.ts`. Keep `dts: true`; a package that does
+not emit declarations degrades its consumers to `any` (see
+[Build order](#build-order-and-why-it-matters)).
+
+**5. Wire it up** — add `"@internal/thing": "workspace:*"` to the consuming
+package, then `bun install` to link it. Turbo derives build order from that
+dependency, so nothing else needs configuring.
+
+Finish with `bun run syncpack:format && bun install`, then `turbo build` to
+confirm the new package builds in the right order.
+
 ## Verification
 
 Run all three after any change, and fix failures before moving on:

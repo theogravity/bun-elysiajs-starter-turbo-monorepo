@@ -23,13 +23,14 @@ compiled binary and fail at runtime with "Cannot find package" errors.
 
 ## Import Extensions
 
-The two apps have opposite rules, set by their `moduleResolution`:
+The two apps have **opposite** rules, set by their `moduleResolution`:
 
 - **Backend** (`node16`): every relative and aliased import ends in `.js`, even though the
   file is `.ts` — `import { db } from "@/db/index.js"`
 - **Frontend** (`bundler`): no extension — `import { api } from "@/lib/api"`
 
-`@/` maps to `src/` in both.
+`@/` maps to `src/` in both. Copying an import line from one app into the other will not
+resolve. This is the single most common first-edit mistake in this repo.
 
 ## File Size and Organization
 
@@ -167,26 +168,14 @@ This applies to:
 
 ## Reference Models
 
-Schemas used by more than one route or test belong in `src/schema/` and must be registered on
-`apiModels` (`src/schema/index.ts`). Registered models can then be referenced **by name** in a
-route's top-level `body`, `query`, `params`, and `response` slots, which emits a `$ref` to a
-shared OpenAPI component instead of inlining a copy per route:
+A schema used by more than one route or test belongs in `src/schema/` and is registered on
+`apiModels` (`src/schema/index.ts`) so it becomes a named, shared OpenAPI component rather
+than a copy inlined into each route.
 
-```typescript
-response: {
-  200: GetUserResponseSchema,   // route-local, inlined
-  404: "ApiErrorResponse",      // registered model, emitted as a $ref
-}
-```
-
-`apiModels` must be applied somewhere in the composed app for a name to resolve;
-`src/api/routes.ts` applies it globally, so this already holds for every route. Applying it on
-the route instance too keeps the file self-contained (Elysia deduplicates named plugins).
-If it is registered nowhere, the OpenAPI `$ref` dangles and the route's response types
-collapse to `{}`.
-
-Name references only work at the top level of a slot — a schema nested inside a `t.Object`
-must be the imported constant.
+The mechanics — how a name reference resolves, where `apiModels` has to be applied, and what
+breaks when it is not — are documented once in **`apps/backend/AGENTS.md`** under "Schemas and
+reference models". Do not restate them here; this file has already drifted from that section
+once.
 
 ## Co-location of Related Definitions
 
