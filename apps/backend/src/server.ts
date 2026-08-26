@@ -2,13 +2,14 @@ import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { routes } from "@/api/routes.js";
-import { errorHandler } from "@/lib/error-handler.js";
 import { contextPlugin } from "@/plugins/context.plugin.js";
+import { errorHandlerPlugin } from "@/plugins/error-handler.plugin.js";
 import { logger } from "@/utils/logger.js";
 
 export function createApp() {
   const app = new Elysia()
     .use(contextPlugin)
+    .use(errorHandlerPlugin)
     .use(cors())
     .use(
       openapi({
@@ -30,7 +31,6 @@ export function createApp() {
         },
       }),
     )
-    .onError(errorHandler)
     .get("/", () => "OK")
     .use(routes);
 

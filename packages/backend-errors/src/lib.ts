@@ -1,15 +1,38 @@
-import type { ErrorObject } from "ajv";
 import cleanStack from "clean-stack";
 import { nanoid } from "nanoid";
 import { serializeError } from "serialize-error";
 import sprintf from "sprintf-js";
 import { BackendErrorCodeDefs, type BackendErrorCodes } from "./error-codes";
 
-const stackFilter = (path) => !/backend-errors/.test(path);
+const stackFilter = (path: string) => !/backend-errors/.test(path);
+
+/**
+ * A single validation failure.
+ *
+ * Deliberately structural rather than imported from a validator: the values that
+ * land here come from Elysia's `error.all` (TypeBox), and the extra index
+ * signature keeps whatever additional fields the validator attaches.
+ */
+export interface ApiValidationErrorItem {
+  /** The validation rule that failed, e.g. "minLength" */
+  keyword?: string;
+  /** JSON pointer to the offending property, e.g. "/email" */
+  instancePath?: string;
+  /** JSON pointer into the schema that produced the failure */
+  schemaPath?: string;
+  /** Rule-specific detail, e.g. `{ limit: 8 }` for "minLength" */
+  params?: Record<string, any>;
+  /** Human-readable description of the failure */
+  message?: string;
+  [key: string]: any;
+}
 
 export interface ApiValidationError {
-  validation: ErrorObject[];
+  /** The individual field-level failures */
+  validation: ApiValidationErrorItem[];
+  /** Which part of the request failed validation, e.g. "body" or "query" */
   validationContext: string;
+  /** Summary message for the validation failure as a whole */
   message: string;
 }
 
@@ -35,8 +58,8 @@ export interface ApiErrorParams {
    */
   metadataSafe?: Record<string, any>;
   /**
-   * AJV-style validation errors
-   * @see https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/#validation-messages-with-other-validation-libraries
+   * Field-level validation failures, populated by the global error handler when
+   * Elysia's schema validation rejects a request.
    */
   validationError?: ApiValidationError;
   /**
@@ -97,8 +120,8 @@ export class ApiError extends Error {
    */
   logLevel?: "error" | "warn" | "info" | "debug" | "trace" | "fatal";
   /**
-   * AJV-style validation errors
-   * @see https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/#validation-messages-with-other-validation-libraries
+   * Field-level validation failures, populated by the global error handler when
+   * Elysia's schema validation rejects a request.
    */
   validationError?: ApiValidationError;
   /**
@@ -210,7 +233,12 @@ export type ApiErrorShort = Pick<
 };
 
 /**
- * Creates an API error and throws it
+ * Creates an API error and throws it.
+ *
+ * The `never` return type lets TypeScript narrow after the call, so a guard like
+ * `if (!user) throwApiError({ ... })` leaves `user` non-nullable afterwards
+ * without a cast.
+ *
  * @throws {ApiError}
  */
 export function throwApiError({
@@ -223,7 +251,7 @@ export function throwApiError({
   isInternalError,
   logLevel,
   doNotLog,
-}: ApiErrorShort) {
+}: ApiErrorShort): never {
   throw createApiError({
     code,
     message,
@@ -238,8 +266,9 @@ export function throwApiError({
 }
 
 /**
- * Creates an API error
- * @throws {ApiError}
+ * Creates an API error and returns it without throwing. Use this when you need to
+ * attach the error to something (a `causedBy` chain, a batch result) instead of
+ * raising it; use `throwApiError` for the common case.
  */
 export function createApiError({
   code,

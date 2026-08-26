@@ -56,6 +56,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@internal/backend-client": "workspace:*",
+        "@internal/backend-errors": "workspace:*",
         "@loglayer/transport-simple-pretty-terminal": "3.3.0",
         "@tanstack/react-query": "5.102.6",
         "@tanstack/react-router": "1.170.32",
@@ -64,6 +65,7 @@
         "react-dom": "19.2.8",
       },
       "devDependencies": {
+        "@elysiajs/eden": "1.4.9",
         "@internal/tsconfig": "workspace:*",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-query-devtools": "5.102.6",
@@ -75,6 +77,7 @@
         "@types/react": "19.2.18",
         "@types/react-dom": "19.2.5",
         "@vitejs/plugin-react": "6.1.0",
+        "elysia": "1.4.30",
         "happy-dom": "20.11.6",
         "tailwindcss": "4.3.3",
         "typescript": "7.0.2",
@@ -109,12 +112,8 @@
         "@internal/tsconfig": "workspace:*",
         "@types/node": "26.3.0",
         "@types/sprintf-js": "1.1.4",
-        "ajv": "8.20.0",
         "hash-runner": "4.0.0",
         "tsdown": "0.22.14",
-      },
-      "peerDependencies": {
-        "ajv": "8.20.0",
       },
     },
     "packages/tsconfig": {

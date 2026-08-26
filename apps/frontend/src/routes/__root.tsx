@@ -1,19 +1,31 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
-import { queryClient } from "@/lib/query-client";
 
-export const Route = createRootRoute({
+/** Shape of the router context created in `main.tsx`. */
+export interface RouterContext {
+  queryClient: QueryClient;
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,
 });
 
 function RootComponent() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
+      <nav className="flex gap-4 border-gray-200 border-b p-4">
+        <Link to="/" className="font-medium hover:underline">
+          Home
+        </Link>
+        <Link to="/users" className="font-medium hover:underline">
+          Users
+        </Link>
+      </nav>
       <Outlet />
       <TanStackRouterDevtools />
       <ReactQueryDevtools />
-    </QueryClientProvider>
+    </>
   );
 }

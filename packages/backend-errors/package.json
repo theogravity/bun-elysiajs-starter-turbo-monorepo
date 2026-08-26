@@ -30,11 +30,7 @@
     "@types/sprintf-js": "1.1.4",
     "@types/node": "26.3.0",
     "@internal/tsconfig": "workspace:*",
-    "ajv": "8.20.0",
     "hash-runner": "4.0.0",
     "tsdown": "0.22.14"
-  },
-  "peerDependencies": {
-    "ajv": "8.20.0"
   }
 }

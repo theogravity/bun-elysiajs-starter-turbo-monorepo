@@ -15,6 +15,25 @@ export class UsersRepository extends BaseRepository {
     return db.selectFrom("users").selectAll().where("id", "=", userId).executeTakeFirst();
   }
 
+  /**
+   * Returns a page of users, newest first.
+   */
+  async listUsers({ db, limit, offset }: { db: Kysely<Database>; limit: number; offset: number }): Promise<UserDb[]> {
+    return db.selectFrom("users").selectAll().orderBy("createdAt", "desc").limit(limit).offset(offset).execute();
+  }
+
+  /**
+   * Returns the total number of users, ignoring pagination.
+   */
+  async countUsers({ db }: { db: Kysely<Database> }): Promise<number> {
+    const { count } = await db
+      .selectFrom("users")
+      .select((eb) => eb.fn.countAll().as("count"))
+      .executeTakeFirstOrThrow();
+
+    return Number(count);
+  }
+
   async removeUserById({ db, userId }: { db: Kysely<Database>; userId: string }): Promise<DeleteResult[]> {
     return db.deleteFrom("users").where("id", "=", userId).execute();
   }

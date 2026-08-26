@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Emitted so @internal/backend-client (and through it the frontend) can see
+    // the `App` type. Without declarations `@internal/backend` resolves to plain
+    // JS and Eden Treaty silently degrades to an untyped client.
+    "declaration": true
+  },
+  "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/test-utils/**"]
+}
