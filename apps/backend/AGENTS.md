@@ -2,6 +2,16 @@
 
 Backend-specific documentation for the ElysiaJS API server.
 
+See the root `AGENTS.md` for monorepo-wide commands and build ordering.
+
+> **The `users` resource is example scaffolding, not the domain.** It exists to show
+> the layering end to end. Every `users` / `user_providers` file — migration, table
+> types, repositories, service, routes, schemas, tests — is meant to be replaced with
+> the real domain. Follow its patterns; do not extend it unless the task is actually
+> about users. See
+> [Example scaffolding vs. project infrastructure](../../AGENTS.md) for the full list
+> and what to keep.
+
 ## URLs
 
 - API server: http://localhost:3080
@@ -10,28 +20,83 @@ Backend-specific documentation for the ElysiaJS API server.
 
 ## Commands
 
-### Development
-
 ```bash
 bun run dev                # Start dev server with watch
-bun run test               # Run tests
+bun run test               # Run all tests
+bun run test path/to.test.ts   # Run a single test file
+bun run test -t "substring"    # Run tests whose name matches
+bun run verify-types       # Type check (includes tests and test-utils)
+bun run lint               # Biome check + autofix
+bun run build              # Compile to dist/ (JS + .d.ts)
+bun run compile            # Bytecode-compiled single binary
+bun run prod               # Run the compiled build
 ```
 
-### Building
-
-```bash
-bun run build              # Compile TypeScript to dist/
-bun run compile            # Create bytecode-compiled binary
-bun run prod               # Run production build
-```
-
-### Database Migrations
+### Database migrations
 
 ```bash
 bun run db:migrate:create  # Create a new migration
 bun run db:migrate:latest  # Run all pending migrations
-bun run db:migrate:undo    # Rollback last migration
+bun run db:migrate:undo    # Roll back the last migration
 ```
+
+## Conventions you will get wrong if you don't read this
+
+These four are not guessable from the surrounding code and are the most common
+source of broken first attempts.
+
+### 1. Imports need a `.js` extension
+
+`tsconfig.json` sets `moduleResolution: node16`, so **every relative and aliased
+import must end in `.js`**, even though the file on disk is `.ts`:
+
+```typescript
+import { db } from "@/db/index.js";          // correct
+import { db } from "@/db/index";             // fails to resolve
+```
+
+`@/` is aliased to `src/`. Bare package imports (`elysia`, `kysely`) take no
+extension. The frontend uses `moduleResolution: bundler` and the opposite rule —
+no extensions there.
+
+### 2. The database is snake_case, the TypeScript is camelCase
+
+`src/db/index.ts` registers Kysely's `CamelCasePlugin`. It translates in both
+directions at query time, so:
+
+- **Migrations** declare snake_case columns: `given_name`, `created_at`
+- **Table interfaces and query builders** use camelCase: `givenName`, `createdAt`
+
+```typescript
+// migration
+.addColumn("given_name", "varchar(50)", (col) => col.notNull())
+
+// src/db/types/users.db-types.ts
+export interface UsersTable {
+  givenName: string;
+}
+
+// repository — camelCase here too, the plugin rewrites it
+db.selectFrom("users").orderBy("createdAt", "desc")
+```
+
+Getting this backwards fails at runtime, not at compile time. There is no type
+error for a column name that does not exist in the database.
+
+### 3. Validation failures come back as 400, not 422
+
+Elysia natively returns 422 for a schema validation failure. The global error
+handler rewrites it into the standard error body with a 400 status and the
+`INPUT_VALIDATION_ERROR` code, so clients only ever parse one error shape. Assert
+400 in tests.
+
+### 4. Failures are returned, not thrown
+
+`return status(404, apiErrorBody({ ... }))` — not `throw`. Only a returned status
+is checked against the route's `response` schema and narrowed by status code for
+client code. Throwing is reserved for genuinely unexpected failures. There is
+exactly one error body shape across the whole API. See
+[Error handling](#error-handling).
 
 ## Architecture
 
@@ -45,12 +110,13 @@ HTTP request
                     └─> Postgres
 ```
 
-Two directories support the layers rather than sitting in the chain:
+Three directories support the layers rather than sitting in the chain:
 
 | Directory | Holds |
 |-----------|-------|
-| `src/schema/` | Shared Elysia `t` schemas and their inferred types, reused across routes and registered as OpenAPI models via `apiModels` |
-| `src/lib/` | Cross-cutting API plumbing — `ApiContext` (the composition root) and the global `errorHandler` |
+| `src/schema/` | Shared Elysia `t` schemas and their inferred types, registered as named OpenAPI models via `apiModels` |
+| `src/plugins/` | Elysia plugins — `contextPlugin` (per-request `ctx`/`log`) and `errorHandlerPlugin` (global `onError`) |
+| `src/lib/` | `ApiContext` (the composition root wiring repositories into services) and `apiErrorBody` |
 
 **The rule: routes call services, services call repositories. A route must never
 call a repository directly.** If a route needs data, it asks a service for it, and
@@ -58,10 +124,9 @@ the service is responsible for reaching the database.
 
 This is not just a convention — it is enforced by the shape of `ApiContext`
 (`src/lib/context.ts`). The context exposes `log` and `services` only.
-Repositories are constructed inside `ApiContext.init()` and handed to services;
-they are never attached to the context. There is no `ctx.repos` in a route
-handler. If you find yourself wanting one, that is the signal to add a service
-method instead.
+Repositories are constructed inside `ApiContext` and handed to services; they are
+never attached to the context. There is no `ctx.repos` in a route handler. If you
+find yourself wanting one, that is the signal to add a service method instead.
 
 ### Layer responsibilities
 
@@ -78,10 +143,6 @@ table, extending `BaseRepository` (which provides `log`).
 
 ```typescript
 export class UsersRepository extends BaseRepository {
-  async createUser({ db, user }: { db: Kysely<Database>; user: NewUser }): Promise<UserDb> {
-    return db.insertInto("users").values(user).returningAll().executeTakeFirstOrThrow();
-  }
-
   async getUserById({ db, userId }: { db: Kysely<Database>; userId: string }): Promise<UserDb | undefined> {
     return db.selectFrom("users").selectAll().where("id", "=", userId).executeTakeFirst();
   }
@@ -97,6 +158,9 @@ A repository contains query-builder calls and nothing else — no password hashi
 no permission checks, no orchestration across tables. It never reaches for another
 repository or a service; combining entities is the service's job.
 
+Return `undefined` for a missing row (`executeTakeFirst`). Deciding that a missing
+row is an error is the service's call, not the repository's.
+
 ### Service layer (`src/services/`)
 
 Services own the business logic and the transaction boundary. They extend
@@ -107,24 +171,19 @@ export class UsersService extends BaseService {
   async createEMailUser({ user, email, password }: { user: NewUser; email: string; password: string }): Promise<UserDb> {
     const pass = await bcrypt.hash(password, 12);
 
-    let u;
-
-    await this.db.transaction().execute(async (db) => {
-      u = await this.repos.users.createUser({ db, user });
+    // `execute()` resolves to whatever the callback returns. Assigning to an outer
+    // `let` instead would type the result as `UserDb | undefined`, since the
+    // compiler cannot prove the callback ran.
+    return this.db.transaction().execute(async (db) => {
+      const created = await this.repos.users.createUser({ db, user });
 
       await this.repos.userProviders.createUserProvider({
         db,
-        userProvider: {
-          providerType: UserProviderType.EMail,
-          providerAccountId: email,
-          passwordAlgo: PasswordAlgo.BCrypt12,
-          passwordHash: pass,
-          userId: u.id,
-        },
+        userProvider: { providerType: UserProviderType.EMail, userId: created.id, passwordHash: pass },
       });
-    });
 
-    return u;
+      return created;
+    });
   }
 }
 ```
@@ -135,12 +194,14 @@ to two tables atomically is orchestration, and the `db` handle from
 one transaction.
 
 Services may call sibling services through `this.services`. That property is
-populated after construction by `withServices()` in `ApiContext.init()`, which is
-what lets two services reference each other without a circular constructor
-dependency.
+populated after construction by `withServices()` in `ApiContext`, which is what
+lets two services reference each other without a circular constructor dependency.
 
 Services return domain and DB types. They do not import Elysia, do not set status
-codes, and do not build HTTP response bodies.
+codes, and do not build HTTP response bodies. To signal a failure they return a
+domain outcome — `undefined` for a missing row, or a discriminated result for
+something richer — and the route maps it onto a status. See
+[Error handling](#error-handling).
 
 ### Route layer (`src/api/`)
 
@@ -148,34 +209,34 @@ Routes are Elysia instances that validate input, call exactly one service entry
 point, and map the result onto the declared response schema.
 
 ```typescript
-export const createEMailUserRoute = new Elysia().use(contextPlugin).post(
-  "/email",
-  async ({ body, ctx, log }) => {
-    const { familyName, givenName, password, email } = body;
+export const getUserRoute = new Elysia().use(contextPlugin).use(apiModels).get(
+  "/:userId",
+  async ({ params, ctx, log, status }) => {
+    log?.info(`Fetching user: ${params.userId}`);
 
-    log?.info(`Creating e-mail user: ${email}`);
+    const user = await ctx.services.users.getUserById({ userId: params.userId });
 
-    // one call into the service layer — never into ctx.repos
-    const user = await ctx.services.users.createEMailUser({
-      user: { givenName, familyName },
-      email,
-      password,
-    });
+    // Return the failure; do not throw it. See Error handling below.
+    if (!user) {
+      return status(404, apiErrorBody({ code: BackendErrorCodes.NOT_FOUND_ERROR }));
+    }
 
-    const response: CreateEMailUserResponse = {
+    const response: GetUserResponse = {
       user: { id: user.id, givenName: user.givenName, familyName: user.familyName },
-      provider: { userId: user.id, providerType: UserProviderType.EMail, accountId: email },
     };
 
     return response;
   },
   {
-    body: CreateEMailUserRequestSchema,
-    response: CreateEMailUserResponseSchema,
+    params: GetUserParamsSchema,
+    response: {
+      200: GetUserResponseSchema,
+      404: "ApiErrorResponse",
+    },
     detail: {
-      operationId: "createEMailUser",
+      operationId: "getUser",
       tags: ["user"],
-      description: "Create an e-mail-based account",
+      description: "Fetch a single user by ID",
     },
   },
 );
@@ -183,72 +244,235 @@ export const createEMailUserRoute = new Elysia().use(contextPlugin).post(
 
 Route conventions:
 
-- Routes are Elysia instances, not async functions
+- Routes are Elysia instances, not async functions. Elysia's type inference
+  depends on unbroken method chaining — never split a chain across statements.
 - `.use(contextPlugin)` is required for `ctx` and `log` to be typed
-- The contextPlugin is a singleton — safe to `.use()` in multiple files
-- Handlers return the response directly (no `reply.send()`)
-- Schemas use `t` from `elysia` (TypeBox-based) and are declared as named constants
-- Keep a schema in the route file when only that route uses it; move it to
-  `src/schema/` once a second route or a test needs it, and register it on
-  `apiModels` (`src/schema/index.ts`) so it appears as a named OpenAPI model
-- OpenAPI metadata goes in the `detail` field
-- Map DB rows to the response explicitly; do not return a DB row as-is
+- `.use(apiModels)` makes registered models resolvable by name. `src/api/routes.ts`
+  already applies it to the whole tree, so a route works without its own `.use()`;
+  adding it keeps the route file self-contained and costs nothing
+- Both plugins are named, so Elysia deduplicates them — `.use()` them freely
+- Handlers return the response directly
+- Schemas use `t` from `elysia` and are declared as named constants, never inline
+- Every schema property needs a `description` — it becomes the OpenAPI docs
+- Map DB rows onto the response explicitly; returning a row as-is leaks columns
+- OpenAPI metadata goes in `detail`, including a unique `operationId`
 
-### Where does this logic go?
+### Schemas and reference models
 
-| You want to... | Put it in |
-|----------------|-----------|
-| Validate the shape of a request body | Route schema (`t.Object({...})`) |
-| Reject a request the user is not allowed to make | Service |
-| Hash a password, generate a token, compute a derived value | Service |
-| Write to two tables atomically | Service (open the transaction, pass `db` down) |
-| Add a `WHERE` clause or a join | Repository |
-| Convert a DB row into the API response shape | Route |
-| Reuse logic across two routes | Service method |
-| Reuse a query across two services | Repository method |
+Keep a schema in the route file when only that route uses it. Once a second route
+or a test needs it, move it to `src/schema/` and register it on `apiModels`
+(`src/schema/index.ts`).
 
-### Request context
-
-The `contextPlugin` (`src/plugins/context.plugin.ts`) uses `@loglayer/elysia` for
-request-scoped logging and `.resolve()` to build an `ApiContext` per request. The
-plugin uses `.as("global")` so the types propagate to every consumer.
-
-`ApiContext.init()` is the composition root: it constructs the repositories,
-passes them into the services via `serviceParams`, then calls `withServices()` on
-each service. Routes see only `ctx.log` and `ctx.services`.
-
-For work outside a request (scripts, jobs), `getRequestlessContext()` returns a
-singleton context with no request-scoped data attached.
-
-### Resource registration
-
-Resource index files (`src/api/users/index.ts`) group routes under a prefix:
+Registered models can be referenced **by name** in the top-level `body`, `query`,
+`params`, and `response` slots. This is Elysia's recommended practice: it emits a
+`$ref` to a shared OpenAPI component instead of inlining a copy of the schema into
+every route.
 
 ```typescript
-export const userRoutes = new Elysia({ prefix: "/users" })
-  .use(createEMailUserRoute);
+response: {
+  200: GetUserResponseSchema,   // route-local, inlined
+  404: "ApiErrorResponse",      // registered model, emitted as a $ref
+}
 ```
 
-The main router (`src/api/routes.ts`) aggregates all resources:
+Name references only work at the top level of a slot. A schema nested inside a
+`t.Object` must be the imported constant (`user: UserSchema`) — that is why the
+`200` schemas above are inlined in the OpenAPI output while the `404` is a `$ref`.
+
+`apiModels` must be applied somewhere in the composed app — on the route instance
+or any ancestor. `src/api/routes.ts` applies it globally, so this is already true
+for every route. **If it is registered nowhere, the failure is quiet and nasty:**
+the OpenAPI document still emits `$ref: "#/components/schemas/ApiErrorResponse"`
+but `components.schemas` is empty, so the reference dangles, and the route's
+response types collapse to `{}`.
+
+If the model list grows, adopt Elysia's namespaced naming (`user.list`,
+`user.create`) to avoid collisions.
+
+For enums, do not use `t.Enum` — it produces poor client and OpenAPI types. Use
+`t.String({ enum: Object.values(MyEnum) })`, as `src/schema/enums.type.ts` does.
+
+## Error handling
+
+Every failure produces the same body, described by `ApiErrorResponseSchema`
+(`src/schema/error.type.ts`) and registered as the `ApiErrorResponse` model. There
+are two ways to produce one, and the choice is not stylistic.
+
+### Expected failures: return `status()`
+
+For a failure the endpoint is designed to produce — a missing row, a duplicate, a
+forbidden action — **return it, do not throw**. This is Elysia's documented
+recommendation, and it is the only form that gets you:
+
+- the body checked against the route's `response` schema at compile time
+- the error narrowed by status code for Eden Treaty clients, so
+  `error.value.code` is typed rather than `unknown`
 
 ```typescript
-export const routes = new Elysia()
-  .use(apiModels)
-  .use(userRoutes);
+import { BackendErrorCodes } from "@internal/backend-errors";
+import { apiErrorBody } from "@/lib/api-error.js";
+
+async ({ params, ctx, status }) => {
+  const user = await ctx.services.users.getUserById({ userId: params.userId });
+
+  if (!user) {
+    return status(
+      404,
+      apiErrorBody({
+        code: BackendErrorCodes.NOT_FOUND_ERROR,
+        message: "No user exists with that ID",
+        metadataSafe: { userId: params.userId },
+      }),
+    );
+  }
+
+  // `user` is narrowed to non-undefined from here
+}
 ```
+
+The status literal appears twice — in `status(404, ...)` and in the `response` map
+— and that is deliberate: the schema is what makes the first one type-checked.
+
+`apiErrorBody` (`src/lib/api-error.ts`) builds the body. A returned status does
+**not** pass through `onError`, so the helper takes over the global handler's two
+other jobs: logging the failure with its `errId`, and choosing the
+production-safe serialization. It logs at `debug` by default, because an expected
+4xx is not a server fault; pass `logLevel` to raise it.
+
+**Which layer decides?** The service returns a domain outcome — `undefined` for a
+missing row, or a discriminated result for something richer. The route maps that
+outcome onto a status. This keeps services free of HTTP concerns entirely, which
+is the same rule as everywhere else in the layering. If two routes need the same
+mapping, that is a sign the service should return a richer result the routes can
+both switch on, not that the service should start throwing.
+
+### Unexpected failures: throw
+
+Throwing is the escape hatch for what the endpoint is *not* designed to produce —
+a violated invariant, a dependency that failed in a way the caller cannot act on,
+or a failure raised deep in a call chain where threading a result back would
+obscure the code. `throwApiError` raises an `ApiError`, which the global handler
+catches and serializes identically:
+
+```typescript
+import { BackendErrorCodes, throwApiError } from "@internal/backend-errors";
+
+throwApiError({
+  code: BackendErrorCodes.INTERNAL_SERVER_ERROR,
+  message: "Ledger and cache disagree after write",
+  metadata: { ledgerId, cacheId },   // logged, never sent to the client
+  isInternalError: true,
+});
+```
+
+`throwApiError` returns `never`, so TypeScript narrows after the call without a
+cast. A thrown error does not appear in the route's `response` schema, so it is
+invisible to Eden and to the OpenAPI document — which is the right outcome for a
+failure that is not part of the endpoint's contract.
+
+**Never `throw new Error()`.** It produces a generic 500 with no code for the
+client to branch on.
+
+### Codes and statuses
+
+| Code | Status |
+|------|--------|
+| `BAD_REQUEST`, `INPUT_VALIDATION_ERROR` | 400 |
+| `INVALID_CREDENTIALS` | 401 |
+| `ACCESS_DENIED` | 403 |
+| `NOT_FOUND_ERROR` | 404 |
+| `EXISTS_ERROR` | 409 |
+| `INTERNAL_SERVER_ERROR` | 500 |
+
+Options shared by `apiErrorBody` and `throwApiError`: `metadataSafe` is returned
+to the client, `metadata` is logged only, `causedBy` attaches the underlying
+error, `isInternalError` returns a generic 500 while logging the real cause under
+the same `errId`, `logLevel` sets the log level, `doNotLog` suppresses logging for
+something already logged.
+
+### The error handler (`src/plugins/error-handler.plugin.ts`)
+
+The global `onError` still catches everything that *is* thrown: `ApiError`,
+Elysia's own `VALIDATION` failures, and anything unexpected. It produces the same
+body shape as `apiErrorBody`.
+
+**Gotcha:** Elysia's documented pattern for custom errors is to register the class
+with `.error({ API_ERROR: ApiError })` and switch on the narrowed `code` in
+`onError`. **That does not work here.** Elysia derives `code` from the thrown
+error's own `code` property when it has one, and `ApiError.code` is already a
+`BackendErrorCodes` value that we deliberately expose on the wire. Registering the
+class yields `code === "NOT_FOUND_ERROR"`, never `"API_ERROR"`, and the switch
+falls through to the 500 branch. The handler therefore discriminates with
+`error instanceof ApiError`, and that check must come before any check on `code`.
+
+## Environment variables
+
+Copy `.env.example` to `.env`. `src/constants.ts` reads and validates them at
+import time; a missing required variable throws on boot.
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `DB_HOST` | yes | — | Postgres host |
+| `DB_NAME` | yes | — | Postgres database name |
+| `DB_USER` | yes | — | Postgres user |
+| `DB_PASS` | yes | — | Postgres password |
+| `DB_PORT` | no | `5432` | Postgres port |
+| `SERVER_PORT` | no | `3080` | Port the API listens on |
+| `BACKEND_LOG_LEVEL` | no | `debug` | LogLayer level |
+
+`NODE_ENV` drives `IS_PROD` and `IS_TEST`. Tests do not read `.env` — the
+Testcontainers global setup injects the database variables before anything reads
+them, which is why a missing `.env` is not an error during a test run. dotenvx's
+`MISSING_ENV_FILE` warning is suppressed for the same reason; a genuinely missing
+variable still fails, with a message naming the variable and pointing at
+`.env.example`.
+
+Every `db:migrate:*` command loads this module too, so all three need the
+variables set even though `create` writes no SQL.
 
 ## Adding a feature end-to-end
 
-There is no scaffolding generator — create the files directly, working from the
-database outward. Each step names the registration you must not forget.
+There is no code generator — create the files directly, working from the database
+outward. Each step names the registration you must not forget.
 
-**1. Table** — add a migration (`bun run db:migrate:create`) and a types file at
-`src/db/types/{name}s.db-types.ts`:
+`src/api/users/` is a complete worked example: a POST, a paginated list, and a
+fetch-by-id with a 404. Read it for the shape, then write your own resource. It is
+example scaffolding, so replacing it is expected; adding `widgets` alongside it is
+not a goal in itself.
+
+**1. Migration** — `bun run db:migrate:create <name>` writes
+`src/db/migrations/{unixMillis}_{name}.ts`. It needs `.env` to exist even though it
+writes no SQL. Columns are snake_case:
+
+```typescript
+export async function up(db: Kysely<any>): Promise<void> {
+  await db.schema
+    .createTable("widgets")
+    .addColumn("id", "uuid", (col) => col.defaultTo(sql`gen_random_uuid()`).primaryKey())
+    .addColumn("owner_id", "uuid", (col) => col.notNull())
+    .addColumn("created_at", "timestamptz", (col) => col.defaultTo(sql`now()`))
+    .addForeignKeyConstraint("fk_owner_id", ["owner_id"], "users", ["id"], (cb) => cb.onDelete("cascade"))
+    .execute();
+}
+
+export async function down(db: Kysely<any>): Promise<void> {
+  await db.schema.dropTable("widgets").execute();
+}
+```
+
+`down` must undo everything `up` did, including indexes and enum types. See
+`src/db/migrations/README.md` for the enum pattern.
+
+**2. Table types** — `src/db/types/widgets.db-types.ts`, camelCase, one JSDoc line
+per property:
 
 ```typescript
 export interface WidgetsTable {
+  /** Unique identifier (UUID v4) */
   id: Generated<string>;
-  name: string;
+  /** ID of the user who owns the widget */
+  ownerId: string;
+  /** Set by the database on insert */
   createdAt: GeneratedAlways<Date>;
 }
 
@@ -259,169 +483,132 @@ export type WidgetUpdate = Updateable<WidgetsTable>;
 
 Register the table on the `Database` interface in `src/db/types/index.ts`.
 
-**2. Repository** — add `src/db/repositories/{name}s.repository.ts` extending
+**3. Repository** — `src/db/repositories/widgets.repository.ts` extending
 `BaseRepository`, with `db` as an explicit parameter on every method. Add it to
-the `Repositories` interface in `src/db/repositories/index.ts` and instantiate it
-in `ApiContext.init()`.
+the `Repositories` interface in `src/db/repositories/index.ts` **and** instantiate
+it in `ApiContext` (`src/lib/context.ts`).
 
-**3. Service** — add `src/services/{name}.service.ts` extending `BaseService`. Add
-it to the `Services` interface in `src/services/index.ts` and instantiate it in
-`ApiContext.init()`.
+**4. Service** — `src/services/widgets.service.ts` extending `BaseService`. Add it
+to the `Services` interface in `src/services/index.ts` **and** instantiate it in
+`ApiContext`.
 
-**4. Route** — add `src/api/{resource}/{operation}.route.ts`, register it in
-`src/api/{resource}/index.ts`, and register the resource in `src/api/routes.ts`.
+**5. Route** — `src/api/widgets/{operation}.route.ts`, registered in
+`src/api/widgets/index.ts`, and the resource registered in `src/api/routes.ts`.
 Put any schema shared with another route or a test in `src/schema/` and add it to
 `apiModels`.
 
-**5. Test** — add `src/api/{resource}/__tests__/{operation}.route.test.ts` and
-drive it through `testApi` (see Testing below).
+**6. Test** — `src/api/widgets/__tests__/{operation}.route.test.ts` driven through
+`testApi`. Migrations are applied automatically by the global setup, so a new
+migration needs no test wiring.
+
+**7. Rebuild** — `turbo build` from the repo root, so the new routes reach the
+`App` type that `@internal/backend-client` and the frontend consume.
 
 Skipping a layer is not a shortcut: a route with no service still needs one, even
 if the service method only forwards to a single repository call. The indirection
 is what keeps business logic out of the HTTP layer as the endpoint grows.
 
+## Request context
+
+The `contextPlugin` (`src/plugins/context.plugin.ts`) uses `@loglayer/elysia` for
+request-scoped logging and `.resolve()` to build an `ApiContext` per request. The
+plugin uses `.as("global")` so the types propagate to every consumer.
+
+`ApiContext` is the composition root: it constructs the repositories, passes them
+into the services via `serviceParams`, then calls `withServices()` on each
+service. Routes see only `ctx.log` and `ctx.services`.
+
+For work outside a request (scripts, jobs), `getRequestlessContext()` returns a
+singleton context with no request-scoped data attached.
+
+## Build output
+
+`bun run build` uses `tsconfig.build.json`, which excludes tests and `test-utils`
+and sets `declaration: true`. **The declarations are load-bearing**: without them
+`@internal/backend` resolves to plain JavaScript and `App` degrades to `any`,
+which would produce an untyped Eden client whose calls still compile.
+
+The shared tsconfig sets `noImplicitAny: true` specifically to stop that failing
+quietly — a missing declaration now surfaces as
+`TS7016: Could not find a declaration file for module '@internal/backend'`
+rather than a silently untyped client. If you see that, or the type
+`"Please install Elysia before using Eden"`, run `turbo build`.
+
+Tests and `test-utils` are excluded from the build because the inferred type of
+`testApi` cannot be named portably in a declaration file. `bun run verify-types`
+uses the unrestricted `tsconfig.json`, so test code is still type-checked.
+
 ## Testing
 
-### Overview
-
-Tests use **Vitest** as the test runner with **Testcontainers** to spin up an isolated PostgreSQL database for each test run. This ensures tests run against a real database with all migrations applied.
-
-### Running Tests
+Tests use **Vitest** with **Testcontainers**, which starts a PostgreSQL container
+and applies all migrations before the suite runs. Docker must be running.
 
 ```bash
-bun run test               # Run all tests
+bun run test                                   # everything
+bun run test src/api/users/__tests__/get-user.route.test.ts
+bun run test -t "should return a 404"
 ```
 
-### Test Infrastructure
+### Infrastructure
 
-#### Global Setup (`src/test-utils/global-setup.ts`)
+- `src/test-utils/global-setup.ts` — starts Postgres, sets `DB_*`, runs migrations
+- `src/test-utils/global-teardown.ts` — stops the container
+- `src/test-utils/test-server.ts` — `testApi`, an Eden Treaty client bound to the
+  app instance directly, so no network is involved
+- `src/test-utils/test-framework/` — fixture generation
 
-Before tests run, the global setup:
-1. Starts a PostgreSQL container via Testcontainers
-2. Sets database environment variables (`DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`)
-3. Runs all migrations against the test database
-
-#### Global Teardown (`src/test-utils/global-teardown.ts`)
-
-After tests complete, containers are stopped and cleaned up.
-
-### Test Utilities
-
-All test utilities are in `src/test-utils/` and imported via `@/test-utils`.
-
-#### `testApi` - Eden Treaty Testing
-
-A pre-configured Eden Treaty client for making type-safe API calls in tests. It wraps the Elysia app instance directly (no network calls):
+### `testApi`
 
 ```typescript
-import { testApi } from "@/test-utils/test-server";
+import { testApi } from "@/test-utils/test-server.js";
 
-const { data, error, status } = await testApi.users.email.post(
-  {
-    email: "test@example.com",
-    password: "pass123",
-    givenName: "Test",
-    familyName: "User",
-  },
-  { headers },
-);
-
-expect(status).toBe(200);
-expect(data?.user.id).toBeDefined();
+const { data, error, status } = await testApi.users.email.post({ ... }, { headers });
+const list = await testApi.users.get({ query: { limit: 25, offset: 0 } });
+const one  = await testApi.users({ userId }).get();   // path params are a call
 ```
 
-#### `testFramework` - Test Data Generation
+Path parameters are expressed by **calling** the segment, not by string
+interpolation.
 
-The `ApiTestingFramework` class provides methods to generate test fixtures:
-
-```typescript
-import { testFramework } from "@/test-utils/test-framework";
-```
-
-**`generateTestFacets(params?)`** - Creates a test user and returns headers for authenticated requests:
+### `testFramework`
 
 ```typescript
-const { user, headers } = await testFramework.generateTestFacets({
-  withLogging: true,  // Enable server-side logging for this test
-});
+import { testFramework } from "@/test-utils/test-framework/index.js";
 
-// user: The created User object
-// headers: Object with test-user-id and test-logging-enabled headers
-```
-
-**`generateNewUsers(count)`** - Creates multiple test users:
-
-```typescript
+const { user, headers } = await testFramework.generateTestFacets({ withLogging: true });
 const users = await testFramework.generateNewUsers(5);
 ```
 
-#### Test Headers
+`generateTestFacets` creates a user and returns headers that mock authentication.
 
-Tests use special `test-` prefixed headers for mocking authentication:
+These two methods are the one piece of test infrastructure coupled to the example
+schema — they insert into `users`. When the example goes, adapt them to the real
+domain rather than deleting them; the Testcontainers setup around them is
+infrastructure worth keeping.
 
 | Header | Purpose |
 |--------|---------|
-| `test-user-id` | Sets `userId` to simulate authenticated user |
-| `test-logging-enabled` | Set to `"true"` to enable server logging for this request |
+| `test-user-id` | Sets `userId` to simulate an authenticated user |
+| `test-logging-enabled` | `"true"` enables server logging for that request |
 
-These headers are processed by test plugins (`src/test-utils/plugins/`) and are only available in the test environment.
+These are handled by `src/test-utils/plugins/` and exist only in tests. Server
+logging is off by default to keep output readable.
 
-### Enabling Logging in Tests
-
-By default, server-side logging is disabled during tests to reduce noise. Enable it when debugging:
-
-**Via `generateTestFacets`:**
-```typescript
-const { headers } = await testFramework.generateTestFacets({
-  withLogging: true,
-});
-```
-
-### Writing Tests
-
-#### Test File Location
-
-Tests live in `__tests__/` directories alongside the code they test:
-```
-src/api/users/
-├── create-email-user.route.ts
-└── __tests__/
-    └── create-email-user.route.test.ts
-```
-
-#### Complete Example
+### Asserting errors
 
 ```typescript
-import { faker } from "@faker-js/faker";
-import { describe, expect, it } from "vitest";
-import { testFramework } from "@/test-utils/test-framework";
-import { testApi } from "@/test-utils/test-server";
+const { error, status } = await testApi.users({ userId: unknownId }).get();
 
-describe("Create e-mail user API", () => {
-  it("should create an e-mail user", async () => {
-    const { headers } = await testFramework.generateTestFacets({
-      withLogging: true,
-    });
-
-    const { data, status } = await testApi.users.email.post(
-      {
-        givenName: faker.person.firstName(),
-        familyName: faker.person.lastName(),
-        email: faker.internet.email(),
-        password: faker.internet.password(),
-      },
-      { headers },
-    );
-
-    expect(status).toBe(200);
-    expect(data?.user.id).toBeDefined();
-  });
-});
+expect(status).toBe(404);
+expect((error?.value as { code?: string })?.code).toBe(BackendErrorCodes.NOT_FOUND_ERROR);
 ```
 
-### Available Libraries
+Assert on `code`, not on the message — messages are free to change.
 
-- **`@faker-js/faker`** - Generate realistic test data (names, emails, etc.)
-- **`vitest`** - Test runner, assertions (`describe`, `it`, `expect`, `beforeAll`, `afterAll`)
-- **`testcontainers`** - Docker-based test infrastructure
-- **`@elysiajs/eden`** - Eden Treaty client for type-safe API testing
+### Writing tests
+
+Tests live in `__tests__/` next to the code they test. Cover the happy path, edge
+cases (empty results, pagination boundaries), and error conditions. When fixing a
+bug, add the failing test first.
+
+Available: `vitest`, `@faker-js/faker`, `@elysiajs/eden`, `testcontainers`.

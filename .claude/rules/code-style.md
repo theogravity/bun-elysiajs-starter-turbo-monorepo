@@ -7,19 +7,29 @@ top-level `import` statements instead.
 
 **Do this:**
 ```typescript
-import { setConfig, getConfig } from "@/config/index.js";
-import { runMigrations } from "@/db/migrate.js";
+import { db } from "@/db/index.js";
+import { ApiContext } from "@/lib/context.js";
 ```
 
 **Not this:**
 ```typescript
-const { setConfig } = await import("@/config/index.js");
-const { runMigrations } = await import("@/db/migrate.js");
+const { db } = await import("@/db/index.js");
+const { ApiContext } = await import("@/lib/context.js");
 ```
 
 Dynamic imports break `bun build --compile` because the bundler cannot statically analyse
 them, so the referenced modules (and their `node_modules` dependencies) are excluded from the
 compiled binary and fail at runtime with "Cannot find package" errors.
+
+## Import Extensions
+
+The two apps have opposite rules, set by their `moduleResolution`:
+
+- **Backend** (`node16`): every relative and aliased import ends in `.js`, even though the
+  file is `.ts` — `import { db } from "@/db/index.js"`
+- **Frontend** (`bundler`): no extension — `import { api } from "@/lib/api"`
+
+`@/` maps to `src/` in both.
 
 ## File Size and Organization
 
@@ -29,20 +39,17 @@ When the split files share a common theme, create a directory to group them:
 
 ```
 # Before: One large file
-src/services/mcp.service.ts  (700+ lines)
+src/services/billing.service.ts  (700+ lines)
 
 # After: Directory with focused modules
 src/services/
-├── mcp.service.ts              # Main service class (thin wrapper)
-└── mcp/
-    ├── server.ts               # Server factory
-    ├── tools.ts                # Tool handlers
-    ├── resources.ts            # Resource handlers
-    ├── schemas.ts              # Validation schemas
+├── billing.service.ts          # Main service class (thin wrapper)
+└── billing/
+    ├── invoices.ts             # Invoice generation
+    ├── proration.ts            # Proration maths
     ├── types.ts                # TypeScript interfaces
-    ├── definitions.ts          # Constants and definitions
     └── __tests__/
-        └── server.test.ts
+        └── proration.test.ts
 ```
 
 Guidelines:
@@ -55,9 +62,9 @@ Guidelines:
 
 Route files and large components should be thin orchestrators. When a route component grows beyond ~200 lines, extract concerns into separate modules:
 
-- **Data-fetching logic** → custom hooks in `src/hooks/` (e.g., `useLogsData.ts`)
-- **Reusable UI blocks** → components in `src/components/` (e.g., `LogsToolbar.tsx`)
-- **Shared types and constants** → `src/lib/` (e.g., `logs-search.ts`)
+- **Data-fetching logic** → custom hooks in `src/hooks/` (e.g., `useUsers.ts`)
+- **Reusable UI blocks** → components in `src/components/` (e.g., `UserTable.tsx`)
+- **Shared types, constants, and query options** → `src/lib/`
 
 Route files should only contain:
 - The route definition (`createFileRoute` + `validateSearch`)
@@ -80,71 +87,69 @@ Use TypeScript union types or enums for values with a fixed set of options inste
 
 **Do this:**
 ```typescript
-// Define shared types in src/schema/
-export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
-export type Timeframe = "1m" | "5m" | "15m" | "30m" | "1h" | "6h" | "24h" | "live";
+// Database-facing enums live next to the table types
+export enum UserProviderType {
+  EMail = "EMail",
+}
 
-// Use in interfaces
-interface LogInput {
-  level?: LogLevel;  // Type-safe, autocomplete-friendly
+interface UserProviderInput {
+  providerType: UserProviderType;  // Type-safe, autocomplete-friendly
 }
 ```
 
 **Not this:**
 ```typescript
-interface LogInput {
-  level?: string;  // Any string accepted, no validation
+interface UserProviderInput {
+  providerType: string;  // Any string accepted, no validation
 }
 ```
 
-For Elysia route schemas, create corresponding schema definitions using Elysia's `t` module:
-```typescript
-// In src/schema/log.type.ts
-export const LogLevelSchema = t.Union([
-  t.Literal("fatal"),
-  t.Literal("error"),
-  // ...
-]);
-```
+For the API surface, mirror the enum with an Elysia schema in `src/schema/enums.type.ts`.
+Do **not** use `t.Enum` — it produces poor OpenAPI output and weak client types:
 
-For MCP tool schemas, use Zod:
 ```typescript
-// In src/mcp/schemas.ts
-export const LogLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
+import { t } from "elysia";
+import { UserProviderType } from "@/db/types/user-providers.db-types.js";
+
+export const UserProviderTypeSchema = t.String({
+  enum: Object.values(UserProviderType),
+  title: "Auth provider type",
+  description: "The type of the auth provider",
+});
 ```
 
 ## Schema Definitions
 
-Define all schemas (input, output, internal) as named constants rather than inline definitions. This improves readability, enables reuse, and makes the code structure consistent.
+Define all schemas as named constants rather than inline definitions. This improves readability,
+enables reuse, and keeps route definitions scannable.
 
 **Do this:**
 ```typescript
-/** Schema for tool input */
-const ToolInputSchema = z.object({
-  query: z.string().describe("Search query"),
-  limit: z.number().default(10).describe("Max results"),
+/** Query parameters for listing users */
+const ListUsersQuerySchema = t.Object({
+  limit: t.Optional(t.Number({ default: 25, description: "Maximum number of users to return" })),
+  offset: t.Optional(t.Number({ default: 0, description: "Number of users to skip" })),
 });
 
-/** Schema for tool output */
-const ToolOutputSchema = z.object({
-  results: z.array(ResultSchema),
+/** Successful response body */
+const ListUsersResponseSchema = t.Object({
+  users: t.Array(UserSchema, { description: "The requested page of users" }),
+  total: t.Number({ description: "Total number of users, ignoring pagination" }),
 });
 
-server.registerTool("my_tool", {
-  inputSchema: ToolInputSchema,
-  outputSchema: ToolOutputSchema,
-}, handler);
+export const listUsersRoute = new Elysia().use(contextPlugin).get("/", handler, {
+  query: ListUsersQuerySchema,
+  response: { 200: ListUsersResponseSchema },
+});
 ```
 
 **Not this:**
 ```typescript
-server.registerTool("my_tool", {
-  inputSchema: z.object({  // Inline schema - hard to read and reuse
-    query: z.string().describe("Search query"),
-    limit: z.number().default(10).describe("Max results"),
+export const listUsersRoute = new Elysia().get("/", handler, {
+  query: t.Object({  // Inline schema — hard to read and impossible to reuse
+    limit: t.Optional(t.Number()),
   }),
-  outputSchema: ToolOutputSchema,
-}, handler);
+});
 ```
 
 ## Elysia Schema Descriptions
@@ -153,27 +158,6 @@ All Elysia `t` schema properties in API routes must include a `description` fiel
 
 Use `import { t } from "elysia"` for all schema definitions.
 
-```typescript
-import { t } from "elysia";
-
-const QueryParamsSchema = t.Object({
-  limit: t.Optional(t.Number({
-    default: 100,
-    description: "Maximum number of logs to return"
-  })),
-  offset: t.Optional(t.Number({
-    default: 0,
-    description: "Number of logs to skip for pagination"
-  })),
-  timeframe: t.Optional(TimeframeSchema),
-});
-
-const ResponseSchema = t.Object({
-  logs: t.Array(LogSchema, { description: "List of log entries" }),
-  total: t.Number({ description: "Total count of matching logs" }),
-});
-```
-
 This applies to:
 - Query parameter schemas (`querystring`)
 - Path parameter schemas (`params`)
@@ -181,64 +165,97 @@ This applies to:
 - Response schemas (`response`)
 - Nested object properties within any schema
 
-## Co-location of Related Definitions
+## Reference Models
 
-Keep all definitions for a single concept in the same file. When a handler/tool has associated schemas, types, and metadata definitions, define them all in the handler file rather than spreading across multiple files.
+Schemas used by more than one route or test belong in `src/schema/` and must be registered on
+`apiModels` (`src/schema/index.ts`). Registered models can then be referenced **by name** in a
+route's top-level `body`, `query`, `params`, and `response` slots, which emits a `$ref` to a
+shared OpenAPI component instead of inlining a copy per route:
 
-**Do this:**
 ```typescript
-// tools/query-logs.ts - everything for this tool in one place
-
-/** Tool definition for external discovery */
-export const QUERY_LOGS_DEFINITION: McpToolDefinition = {
-  name: "query_logs",
-  title: "Query Logs",
-  description: "Query logs with filtering options.",
-  parameters: [...],
-};
-
-/** Schema for input */
-const QueryLogsInputSchema = z.object({...});
-
-/** Schema for output */
-const QueryLogsOutputSchema = z.object({...});
-
-export function registerQueryLogsTool(server: McpServer): void {
-  server.registerTool("query_logs", {
-    title: QUERY_LOGS_DEFINITION.title,
-    description: QUERY_LOGS_DEFINITION.description,
-    inputSchema: QueryLogsInputSchema,
-    outputSchema: QueryLogsOutputSchema,
-  }, handler);
+response: {
+  200: GetUserResponseSchema,   // route-local, inlined
+  404: "ApiErrorResponse",      // registered model, emitted as a $ref
 }
 ```
 
-Aggregate exports in an index file when needed for external consumption:
+`apiModels` must be applied somewhere in the composed app for a name to resolve;
+`src/api/routes.ts` applies it globally, so this already holds for every route. Applying it on
+the route instance too keeps the file self-contained (Elysia deduplicates named plugins).
+If it is registered nowhere, the OpenAPI `$ref` dangles and the route's response types
+collapse to `{}`.
+
+Name references only work at the top level of a slot — a schema nested inside a `t.Object`
+must be the imported constant.
+
+## Co-location of Related Definitions
+
+Keep all definitions for a single concept in the same file. A route's schemas, its inferred
+types, and the route itself belong together rather than spread across files.
+
+**Do this:**
 ```typescript
-// tools/index.ts
-export const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
-  QUERY_LOGS_DEFINITION,
-  GET_LOG_DEFINITION,
-  // ...
-];
+// api/users/get-user.route.ts — everything for this route in one place
+
+const GetUserParamsSchema = t.Object({
+  userId: t.String({ format: "uuid", description: "ID of the user to fetch" }),
+});
+
+export type GetUserParams = typeof GetUserParamsSchema.static;
+
+const GetUserResponseSchema = t.Object({ user: UserSchema });
+
+export type GetUserResponse = typeof GetUserResponseSchema.static;
+
+export const getUserRoute = new Elysia().use(contextPlugin).use(apiModels).get(
+  "/:userId",
+  handler,
+  {
+    params: GetUserParamsSchema,
+    response: { 200: GetUserResponseSchema, 404: "ApiErrorResponse" },
+    detail: { operationId: "getUser", tags: ["user"], description: "Fetch a single user by ID" },
+  },
+);
+```
+
+Aggregate in an index file only when something external needs the collection:
+```typescript
+// api/users/index.ts
+export const userRoutes = new Elysia({ prefix: "/users" })
+  .use(createEMailUserRoute)
+  .use(listUsersRoute)
+  .use(getUserRoute);
+```
+
+## Method Chaining
+
+Elysia's type inference depends on unbroken method chaining. Never split a chain across
+statements — the types silently degrade:
+
+**Do this:**
+```typescript
+const app = new Elysia().use(contextPlugin).use(apiModels).get("/", handler);
 ```
 
 **Not this:**
 ```typescript
-// definitions.ts - centralized definitions far from implementation
-export const MCP_TOOL_DEFINITIONS = [
-  { name: "query_logs", ... },  // Duplicates info in handler file
-  { name: "get_log", ... },
-];
-
-// tools/query-logs.ts
-export function registerQueryLogsTool() {
-  server.registerTool("query_logs", {
-    title: "Query Logs",  // Duplicated from definitions.ts
-    ...
-  });
-}
+const app = new Elysia();
+app.use(contextPlugin);   // type information is lost
+app.get("/", handler);
 ```
+
+## Implicit `any`
+
+`noImplicitAny` is on. Beyond the usual benefits, it is what makes a missing type
+declaration in the workspace a hard error rather than a silently untyped value — see
+`build.md`. Do not reach for `any` to silence it; type the value, or use `unknown` and
+narrow.
+
+Explicit `any` is still allowed (Biome's `noExplicitAny` is off), because a few places
+genuinely need it: `Kysely<any>` in migrations, which must stay frozen against the
+schema at the time they were written; `causedBy` in `ApiError`, which accepts anything
+throwable; and casts where a third-party type is missing or too narrow. Comment those
+at the call site so the next reader knows it was deliberate rather than lazy.
 
 ## JSDoc Comments
 
@@ -246,18 +263,37 @@ All public classes, methods, and functions should have JSDoc comments that descr
 - What the class/function does
 - Parameters and their purpose
 - Return values
-- Example usage (for complex functions)
+- Errors thrown, for anything that raises an `ApiError`
 
 ```typescript
 /**
- * Ingests a single log entry into the database.
- * @param input - The log entry data to ingest
- * @returns The created log record with generated ID and timestamp
+ * Fetches a single user.
+ *
+ * Returns `undefined` rather than raising when the user does not exist. Mapping
+ * that outcome onto an HTTP status is the route's job.
+ *
+ * @param userId - ID of the user to fetch
+ * @returns The user record, or `undefined` if no user has that ID
  */
-async ingestLog(input: LogInput): Promise<LogDb> {
+async getUserById({ userId }: { userId: string }): Promise<UserDb | undefined> {
   // ...
 }
 ```
+
+## Returning Errors, Not Throwing Them
+
+Expected failures are **returned** from a route, not thrown:
+
+```typescript
+if (!user) {
+  return status(404, apiErrorBody({ code: BackendErrorCodes.NOT_FOUND_ERROR }));
+}
+```
+
+Only a returned status is checked against the route's `response` schema and narrowed
+by status code for Eden Treaty clients. Throwing bypasses both. Reserve `throwApiError`
+for genuinely unexpected failures — violated invariants, or errors raised deep in a
+call chain where threading a result back would obscure the code. Never `throw new Error()`.
 
 ## Interface Property Documentation
 
@@ -269,17 +305,15 @@ All interface properties should have JSDoc comments explaining their purpose. Th
 
 ```typescript
 /**
- * Database table schema for log entries.
+ * Database table schema for users.
  */
-export interface LogsTable {
+export interface UsersTable {
   /** Unique identifier (UUID v4) */
-  id: string;
-  /** ISO 8601 timestamp when the log event occurred */
-  timestamp: string;
-  /** Name of the service that generated the log */
-  service: string;
-  /** JSON-serialized arbitrary metadata attached to the log */
-  metadata: string | null;
+  id: Generated<string>;
+  /** The user's first name */
+  givenName: string;
+  /** Set by the database on insert */
+  createdAt: GeneratedAlways<Date>;
 }
 ```
 
@@ -301,7 +335,6 @@ export function createExpensiveResource(deps: Dependencies): ExpensiveResource {
   }
 
   instance = new ExpensiveResource(deps);
-  // ... initialization ...
 
   return instance;
 }
@@ -319,3 +352,5 @@ Key points:
 - The factory function checks for an existing instance before creating
 - Provide a reset function for test isolation (marked `@internal`)
 - Tests should call reset in `beforeEach`/`afterEach` to ensure isolation
+
+`getRequestlessContext()` in `apps/backend/src/lib/context.ts` is an example of this pattern.

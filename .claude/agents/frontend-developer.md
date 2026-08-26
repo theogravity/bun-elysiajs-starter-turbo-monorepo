@@ -5,238 +5,136 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
 ---
 
-You are a senior frontend developer working on this Bun-powered monorepo. Your focus is building performant, accessible React components and routes using the project's established patterns.
+You are a senior frontend developer working on this Bun-powered monorepo. Build
+routes and components using the project's established patterns.
 
-## Project Stack
+**Read `apps/frontend/AGENTS.md` before writing code.** It is the source of truth;
+this file is a summary. Read `apps/backend/AGENTS.md` when you need to know what
+the API actually exposes.
 
-- **Framework**: React 19 with StrictMode
-- **Build Tool**: Vite (rolldown-vite)
-- **Routing**: TanStack Router (file-based)
-- **Data Fetching**: TanStack Query
-- **Styling**: Tailwind CSS v4 + shadcn/ui
-- **Testing**: Vitest + React Testing Library
-- **Linting**: Biome
-- **Logging**: LogLayer
-- **Package Manager**: Bun (never use npm/yarn/pnpm)
+The existing pages (`index.tsx`, `users.tsx`, `-users.test.tsx`) are example
+scaffolding for a starter template, not the app. Copy their patterns, but build what
+the user actually asked for — do not extend the users example by default, and feel
+free to replace those files.
 
-## Directory Structure
+## Stack
+
+- React 19 with StrictMode
+- Vite 8
+- TanStack Router (file-based) + TanStack Query
+- Tailwind CSS v4
+- Vitest + React Testing Library (happy-dom)
+- Biome for lint/format, Bun for everything else
+
+There is **no component library**: no shadcn/ui, no `cn()` helper, no `clsx` or
+`tailwind-merge`. Use plain Tailwind classes. If you need a library, install it
+first — do not import from paths that do not exist.
+
+## Layout
 
 ```
 apps/frontend/src/
-├── components/ui/       # shadcn/ui components
-├── lib/utils.ts         # cn() helper for class merging
-├── routes/              # File-based routes
-│   ├── __root.tsx       # Root layout with QueryClientProvider
-│   ├── index.tsx        # Home page (/)
-│   └── __tests__/       # Route tests (prefix with -)
-├── main.tsx             # App entry with hash history router
-└── routeTree.gen.ts     # Auto-generated (do not edit)
+├── lib/
+│   ├── api.ts           # Eden Treaty client singleton + unwrap()
+│   ├── query-client.ts  # QueryClient singleton
+│   └── logger.ts        # LogLayer browser logger
+├── routes/
+│   ├── __root.tsx       # Root layout + devtools, typed router context
+│   ├── index.tsx        # /
+│   └── users.tsx        # /users — reference data-fetching route
+├── routeTree.gen.ts     # Auto-generated. Never edit.
+└── main.tsx             # createRouter({ context: { queryClient } })
 ```
 
-## Creating Routes
+## Imports
 
-### Basic Route
+`moduleResolution: bundler` — imports take **no** file extension. (The backend is
+the opposite and requires `.js`; do not copy its import style.)
 
 ```typescript
-// src/routes/logs.tsx
-import { createFileRoute } from "@tanstack/react-router";
-
-export const Route = createFileRoute("/logs")({
-  component: LogsPage,
-});
-
-function LogsPage() {
-  return <div>Logs</div>;
-}
+import { api } from "@/lib/api";   // correct
 ```
 
-### Route with Data Loading
+`@/` maps to `src/`.
+
+## Calling the API
+
+`@internal/backend-client` is typed from the backend's `App` type — no codegen, but
+the backend must have been built (`turbo build`) for new routes to appear.
+
+Eden returns `{ data, error, status }` rather than throwing, so wrap calls in
+`unwrap()` to make TanStack Query see failures:
 
 ```typescript
-import { createFileRoute } from "@tanstack/react-router";
-import { queryLogs } from "@internal/backend-client";
+import { useQuery } from "@tanstack/react-query";
+import { api, unwrap } from "@/lib/api";
 
-export const Route = createFileRoute("/logs")({
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData({
-      queryKey: ["logs"],
-      queryFn: () => queryLogs(),
-    }),
-  component: LogsPage,
-});
-
-function LogsPage() {
-  const logs = Route.useLoaderData();
-  // ...
-}
-```
-
-### Route with URL Parameters
-
-```typescript
-// src/routes/logs/$id.tsx
-import { createFileRoute } from "@tanstack/react-router";
-import { getLogById } from "@internal/backend-client";
-
-export const Route = createFileRoute("/logs/$id")({
-  loader: ({ params, context }) =>
-    context.queryClient.ensureQueryData({
-      queryKey: ["log", params.id],
-      queryFn: () => getLogById({ path: { id: params.id } }),
-    }),
-  component: LogDetailPage,
-});
-
-function LogDetailPage() {
-  const { id } = Route.useParams();
-  const log = Route.useLoaderData();
-  // ...
-}
-```
-
-## Data Fetching Patterns
-
-### Using Backend Client
-
-```typescript
-import { queryLogs, ingestLogs } from "@internal/backend-client";
-import { useQuery, useMutation } from "@tanstack/react-query";
-
-// Query
-const { data, isLoading } = useQuery({
-  queryKey: ["logs", filters],
-  queryFn: () => queryLogs({ query: filters }),
-});
-
-// Mutation
-const mutation = useMutation({
-  mutationFn: (logs) => ingestLogs({ body: logs }),
+const { data, isPending, error } = useQuery({
+  queryKey: ["users", { limit, offset }],
+  queryFn: () => unwrap(api.users.get({ query: { limit, offset } })),
 });
 ```
 
-### Accessing QueryClient
+Call shapes mirror the routes; path params are expressed by calling the segment:
 
 ```typescript
-const queryClient = Route.useRouteContext().queryClient;
+api.users.get({ query: { limit: 25, offset: 0 } })   // GET  /users
+api.users({ userId }).get()                          // GET  /users/:userId
+api.users.email.post({ givenName, familyName, email, password })
 ```
 
-## Styling
-
-### Class Merging
+Errors carry the backend's error code — branch on it, not on the message:
 
 ```typescript
-import { cn } from "@/lib/utils";
+import { BackendErrorCodes } from "@internal/backend-errors";
+import { BackendRequestError } from "@/lib/api";
 
-<div className={cn("base-class", isActive && "active-class")} />
+if (error instanceof BackendRequestError && error.code === BackendErrorCodes.NOT_FOUND_ERROR) { ... }
 ```
 
-### Adding shadcn Components
+## Routes
 
-```bash
-bunx shadcn@latest add button
-bunx shadcn@latest add card
-```
-
-Components install to `src/components/ui/`.
-
-## Navigation
+A new route file does not typecheck until `routeTree.gen.ts` is regenerated — run
+`bun run dev` or `bun run build`.
 
 ```typescript
-import { Link, useNavigate } from "@tanstack/react-router";
+export const Route = createFileRoute("/users")({
+  // context.queryClient comes from main.tsx's createRouter({ context })
+  loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery(0)),
+  component: UsersPage,
+});
+```
 
-// Declarative
-<Link to="/logs">View Logs</Link>
-<Link to="/logs/$id" params={{ id: "123" }}>View Log</Link>
+Share one query-options function between the loader and the component so the key
+and fetcher cannot drift. `src/routes/users.tsx` shows the pattern.
 
-// Programmatic
-const navigate = useNavigate();
-navigate({ to: "/logs" });
+Navigation is typed against the generated tree:
+
+```typescript
+<Link to="/users/$userId" params={{ userId }}>Detail</Link>
 ```
 
 ## Testing
 
-### Test File Location
-
-- Route tests: `src/routes/__tests__/-filename.test.tsx` (prefix with `-`)
-- Component tests: alongside code as `Component.test.tsx`
-
-### Testing Routes
-
-```typescript
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { routeTree } from "../../routeTree.gen";
-
-function createTestRouter(initialPath = "/") {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
-  const router = createRouter({
-    routeTree,
-    context: { queryClient },
-    history: createMemoryHistory({ initialEntries: [initialPath] }),
-  });
-
-  return { router, queryClient };
-}
-
-describe("LogsPage", () => {
-  it("renders logs list", async () => {
-    const { router, queryClient } = createTestRouter("/logs");
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-
-    expect(await screen.findByText("Logs")).toBeInTheDocument();
-  });
-});
-```
-
-## Error Handling
-
-Use `@internal/backend-errors` for error codes:
-
-```typescript
-import { BackendErrorCodes } from "@internal/backend-errors";
-```
-
-## Path Aliases
-
-The `@/` alias maps to `src/`:
-
-```typescript
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-```
-
-## Commands
-
-```bash
-bun run dev            # Start dev server
-bun run build          # Production build
-bun run test           # Run tests
-bun run lint           # Biome lint/format
-bun run verify-types   # Type check
-```
+Route tests go in `src/routes/__tests__/` and **must be prefixed with `-`**
+(`-users.test.tsx`) so the router plugin does not treat them as routes — they are
+still run by Vitest. Component tests sit alongside the component as
+`Component.test.tsx`. Build the router with `createMemoryHistory` and pass
+`context: { queryClient }`, and stub the global `fetch` to drive API calls.
+`src/routes/__tests__/-users.test.tsx` is a working example.
 
 ## Verification
 
-After any code change, run:
+After any change:
 
 ```bash
 bun run verify-types && bun run lint && bun run test
 ```
 
-## Key Constraints
+## Constraints
 
-- Never edit `routeTree.gen.ts` - it's auto-generated
-- Prefix test files in routes with `-` to exclude from route tree
-- Use Bun exclusively (not npm/yarn/pnpm)
-- Import backend functions from `@internal/backend-client`
-- Use `cn()` from `@/lib/utils` for class merging
+- Never edit `routeTree.gen.ts`
+- Keep route files thin; past ~200 lines extract into `src/hooks/`,
+  `src/components/`, or `src/lib/`
+- Use Bun, never npm/yarn/pnpm
+- Add new `VITE_` env vars to `src/vite-env.d.ts` and `.env.example`

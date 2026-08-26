@@ -6,7 +6,7 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 
 ## Requirements
 
-- [Bun](https://bun.sh/) >= 1.0.0
+- [Bun](https://bun.sh/) >= 1.4.0
 - [Docker](https://docs.docker.com/engine/install/) (for local Postgres and testing)
 
 ## Features
@@ -21,6 +21,7 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - Sample database migrations and repositories using Kysely.
 - Shared error handler package for consistent API error responses.
 - Layered backend architecture (routes -> services -> repositories) documented in `apps/backend/AGENTS.md`.
+- Worked end-to-end example: a `users` resource spanning migration, repository, service, routes, tests, and a React page that consumes it — example scaffolding, meant to be replaced (see [Using this as a starter](#using-this-as-a-starter)).
 
 ## Packages
 
@@ -28,8 +29,8 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 |---|---|
 | `apps/backend` | ElysiaJS API server |
 | `apps/frontend` | React frontend (Vite, TanStack Router, TanStack Query, Tailwind CSS) |
-| `packages/backend-client` | Type-safe Eden Treaty client generated from the backend |
-| `packages/backend-errors` | Shared error types and handler for the backend |
+| `packages/backend-client` | Type-safe Eden Treaty client, inferred from the backend's `App` type |
+| `packages/backend-errors` | `ApiError` type and shared error codes |
 | `packages/tsconfig` | Shared TypeScript configuration |
 
 ## Libraries and tools used
@@ -66,9 +67,10 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
    bun install
    ```
 
-3. Copy the example env file:
+3. Copy the example env files:
    ```bash
    cp apps/backend/.env.example apps/backend/.env
+   cp apps/frontend/.env.example apps/frontend/.env
    ```
 
 4. Start the local Postgres server:
@@ -117,13 +119,25 @@ import { createBackendClient } from '@internal/backend-client'
 
 const api = createBackendClient('http://localhost:3080')
 
+// POST /users/email
 const { data, error, status } = await api.users.email.post({
   givenName: 'John',
   familyName: 'Doe',
   email: 'john@example.com',
   password: 'securepass123',
 })
+
+// GET /users?limit=25&offset=0
+const list = await api.users.get({ query: { limit: 25, offset: 0 } })
+
+// GET /users/:userId — path params are expressed by calling the segment
+const one = await api.users({ userId: 'a-uuid' }).get()
 ```
+
+The client is Eden Treaty applied to the backend's exported `App` type, so there is no
+code generation. It does depend on the backend's emitted type declarations: **run
+`turbo build` after changing backend routes**, or the frontend will not see them. See
+`packages/backend-client/README.md`.
 
 ## Database migrations
 
@@ -138,6 +152,44 @@ bun run db:migrate:undo     # Roll back the last migration
 ```bash
 bun run syncpack:update
 ```
+
+## Using this as a starter
+
+The `users` resource is **example scaffolding**, not a feature. It exists to show the
+layering working end to end — migration → repository → service → route → test, plus a
+React page consuming the typed client. Replace it with your own domain.
+
+Safe to delete once you have your own resource:
+
+- `apps/backend/src/db/migrations/0001-init.ts` (the `users` / `user_providers` tables)
+- `apps/backend/src/db/types/users.db-types.ts`, `user-providers.db-types.ts`
+- `apps/backend/src/db/repositories/users.repository.ts`, `user-providers.repository.ts`
+- `apps/backend/src/services/users.service.ts`
+- `apps/backend/src/api/users/`
+- `apps/backend/src/schema/user.type.ts`, `user-provider.type.ts`, `enums.type.ts`
+- `apps/frontend/src/routes/users.tsx` and `__tests__/-users.test.tsx`
+- `apps/frontend/src/routes/index.tsx` — replace its contents rather than deleting the
+  file, or `/` will have no route
+
+Removing one also means removing its registration — in the `Database`, `Repositories`,
+and `Services` interfaces, in `ApiContext`, in `apiModels`, and in `src/api/routes.ts`.
+On the frontend, delete the matching `<Link>` in `__root.tsx` at the same time:
+TanStack types `to` against the generated route tree, so a link to a route you just
+removed becomes a type error.
+
+Keep everything else. In particular the layering and `ApiContext`, the context and
+error-handler plugins, `apiErrorBody` and the shared `ApiErrorResponse` schema, the
+Testcontainers test setup, the frontend's `src/lib/api.ts` client, and all three
+`packages/`.
+
+One caveat: `testFramework.generateTestFacets()` inserts into `users` to build test
+fixtures. Adapt it to your schema rather than deleting it.
+
+## Documentation for agents
+
+`AGENTS.md` at the repo root is the entry point and links to per-package docs
+(`apps/backend/AGENTS.md`, `apps/frontend/AGENTS.md`, and the package READMEs).
+Repo-wide conventions live in `.claude/rules/`.
 
 ## Troubleshooting
 
@@ -157,3 +209,13 @@ or
 Run `turbo daemon clean` and try again. If the second error persists, wait a minute and retry.
 
 Related: https://github.com/vercel/turborepo/issues/8491
+
+### The API client has no types / `"Please install Elysia before using Eden"`
+
+The backend's type declarations are missing or stale. The Eden Treaty client is derived
+from `apps/backend/dist/*.d.ts`; without them `App` degrades to `any` and calls to
+routes that do not exist still compile.
+
+```bash
+turbo build
+```
