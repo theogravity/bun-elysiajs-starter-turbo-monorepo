@@ -45,12 +45,19 @@ HTTP request
                     └─> Postgres
 ```
 
+Two directories support the layers rather than sitting in the chain:
+
+| Directory | Holds |
+|-----------|-------|
+| `src/schema/` | Shared Elysia `t` schemas and their inferred types, reused across routes and registered as OpenAPI models via `apiModels` |
+| `src/lib/` | Cross-cutting API plumbing — `ApiContext` (the composition root) and the global `errorHandler` |
+
 **The rule: routes call services, services call repositories. A route must never
 call a repository directly.** If a route needs data, it asks a service for it, and
 the service is responsible for reaching the database.
 
 This is not just a convention — it is enforced by the shape of `ApiContext`
-(`src/api-lib/context.ts`). The context exposes `log` and `services` only.
+(`src/lib/context.ts`). The context exposes `log` and `services` only.
 Repositories are constructed inside `ApiContext.init()` and handed to services;
 they are never attached to the context. There is no `ctx.repos` in a route
 handler. If you find yourself wanting one, that is the signal to add a service
@@ -181,6 +188,9 @@ Route conventions:
 - The contextPlugin is a singleton — safe to `.use()` in multiple files
 - Handlers return the response directly (no `reply.send()`)
 - Schemas use `t` from `elysia` (TypeBox-based) and are declared as named constants
+- Keep a schema in the route file when only that route uses it; move it to
+  `src/schema/` once a second route or a test needs it, and register it on
+  `apiModels` (`src/schema/index.ts`) so it appears as a named OpenAPI model
 - OpenAPI metadata goes in the `detail` field
 - Map DB rows to the response explicitly; do not return a DB row as-is
 
@@ -260,6 +270,8 @@ it to the `Services` interface in `src/services/index.ts` and instantiate it in
 
 **4. Route** — add `src/api/{resource}/{operation}.route.ts`, register it in
 `src/api/{resource}/index.ts`, and register the resource in `src/api/routes.ts`.
+Put any schema shared with another route or a test in `src/schema/` and add it to
+`apiModels`.
 
 **5. Test** — add `src/api/{resource}/__tests__/{operation}.route.test.ts` and
 drive it through `testApi` (see Testing below).

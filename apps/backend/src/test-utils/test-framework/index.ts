@@ -1,7 +1,7 @@
 import { faker } from "@faker-js/faker";
-import { ApiContext } from "@/api-lib/context.js";
-import type { User } from "@/api-lib/types/user.type.js";
 import { db } from "@/db/index.js";
+import { ApiContext } from "@/lib/context.js";
+import type { User } from "@/schema/user.type.js";
 import { getLogger } from "@/utils/logger.js";
 
 export interface TestHeaders extends Record<string, string | undefined> {

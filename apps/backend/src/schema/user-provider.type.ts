@@ -1,5 +1,5 @@
 import { t } from "elysia";
-import { UserProviderTypeSchema } from "@/api-lib/types/enums.type.js";
+import { UserProviderTypeSchema } from "@/schema/enums.type.js";
 
 export const UserProviderSchema = t.Object({
   userId: t.String({

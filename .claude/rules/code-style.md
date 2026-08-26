@@ -80,7 +80,7 @@ Use TypeScript union types or enums for values with a fixed set of options inste
 
 **Do this:**
 ```typescript
-// Define shared types in api-lib/types/
+// Define shared types in src/schema/
 export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 export type Timeframe = "1m" | "5m" | "15m" | "30m" | "1h" | "6h" | "24h" | "live";
 
@@ -99,7 +99,7 @@ interface LogInput {
 
 For Elysia route schemas, create corresponding schema definitions using Elysia's `t` module:
 ```typescript
-// In src/api-lib/types/log.type.ts
+// In src/schema/log.type.ts
 export const LogLevelSchema = t.Union([
   t.Literal("fatal"),
   t.Literal("error"),

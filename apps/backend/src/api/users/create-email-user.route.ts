@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
-import { UserSchema } from "@/api-lib/types/user.type.js";
-import { UserProviderSchema } from "@/api-lib/types/user-provider.type.js";
 import { UserProviderType } from "@/db/types/user-providers.db-types.js";
 import { contextPlugin } from "@/plugins/context.plugin.js";
+import { UserSchema } from "@/schema/user.type.js";
+import { UserProviderSchema } from "@/schema/user-provider.type.js";
 
 const CreateEMailUserRequestSchema = t.Object({
   givenName: t.String({

@@ -2,7 +2,7 @@ import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { routes } from "@/api/routes.js";
-import { errorHandler } from "@/api-lib/error-handler.js";
+import { errorHandler } from "@/lib/error-handler.js";
 import { contextPlugin } from "@/plugins/context.plugin.js";
 import { logger } from "@/utils/logger.js";
 
