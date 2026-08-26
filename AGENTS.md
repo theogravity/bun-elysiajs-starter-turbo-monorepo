@@ -15,8 +15,34 @@ area you are touching:
 | The typed API client | `packages/backend-client/README.md` |
 | Writing a migration | `apps/backend/src/db/migrations/README.md` |
 
-Repo-wide conventions (code style, dependency pinning, testing, verification) are
-in `.claude/rules/`.
+`apps/backend/AGENTS.md` opens with "Conventions you will get wrong if you don't
+read this". That is literal — it covers four things that are invisible in the
+surrounding code and fail at runtime rather than at compile time. Read them before
+your first edit.
+
+Repo-wide conventions (code style, dependency pinning, testing, verification,
+security posture) are in `.claude/rules/`.
+
+### How these files reach a coding agent
+
+`AGENTS.md` is the source of truth and the format most coding agents read directly.
+Claude Code reads `CLAUDE.md` instead, so each `AGENTS.md` has a one-line
+`CLAUDE.md` beside it that imports it:
+
+```
+CLAUDE.md                 -> @AGENTS.md   (loads at session start)
+apps/backend/CLAUDE.md    -> @AGENTS.md   (loads when a backend file is read)
+apps/frontend/CLAUDE.md   -> @AGENTS.md   (loads when a frontend file is read)
+```
+
+Nested imports load on demand, so an agent planning work in an app before opening
+any of its files should read that app's `AGENTS.md` explicitly.
+
+**Put documentation in `AGENTS.md`, never in `CLAUDE.md`.** The `CLAUDE.md` files
+are bridges and must stay one line, or the two formats will drift. An import is
+used rather than a `CLAUDE.md -> AGENTS.md` symlink because symlink creation on
+Windows needs Administrator rights or Developer Mode, which would break this
+template for anyone cloning it there.
 
 ## Project overview
 

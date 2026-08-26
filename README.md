@@ -191,6 +191,11 @@ fixtures. Adapt it to your schema rather than deleting it.
 (`apps/backend/AGENTS.md`, `apps/frontend/AGENTS.md`, and the package READMEs).
 Repo-wide conventions live in `.claude/rules/`.
 
+Claude Code reads `CLAUDE.md` rather than `AGENTS.md`, so each `AGENTS.md` has a
+one-line `CLAUDE.md` beside it containing `@AGENTS.md`, which imports it. Both
+tools therefore read the same instructions with nothing duplicated. **Write
+documentation in `AGENTS.md`; leave the `CLAUDE.md` files as one-line bridges.**
+
 ## Troubleshooting
 
 ### `turbo watch dev` — daemon connection errors
