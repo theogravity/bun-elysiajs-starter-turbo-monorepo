@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
-import type { Migration, MigrationProvider } from "kysely";
+import type { Migration, MigrationProvider } from "kysely/migration";
 
 const moduleFileUrl = import.meta.url;
 

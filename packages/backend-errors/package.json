@@ -2,8 +2,8 @@
   "name": "@internal/backend-errors",
   "description": "Error emission and handling for the backend",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
+  "private": true,
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -22,18 +22,19 @@
   },
   "dependencies": {
     "clean-stack": "6.0.0",
-    "nanoid": "5.1.6",
+    "nanoid": "6.0.1",
     "serialize-error": "13.0.1",
     "sprintf-js": "1.1.3"
   },
   "devDependencies": {
     "@types/sprintf-js": "1.1.4",
+    "@types/node": "26.3.0",
     "@internal/tsconfig": "workspace:*",
-    "ajv": "8.18.0",
+    "ajv": "8.20.0",
     "hash-runner": "4.0.0",
-    "tsdown": "0.21.0"
+    "tsdown": "0.22.14"
   },
   "peerDependencies": {
-    "ajv": "8.18.0"
+    "ajv": "8.20.0"
   }
 }

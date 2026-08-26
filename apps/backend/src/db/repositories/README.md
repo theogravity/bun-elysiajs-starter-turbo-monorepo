@@ -1,8 +1,16 @@
 # Database repositories
 
-This directory contains the database repositories. Each repository is responsible for a specific entity in the database.
+Each repository owns database access for a single table. Repositories are the only
+place in the backend that builds queries.
 
-Services would use and combine these repositories to perform operations on the database.
+Every method takes the `db` handle as an explicit parameter rather than reading a
+stored connection, so a service can pass a transaction handle and have several
+repository calls share one transaction.
 
-You should not use repositories in a controller. Instead, use services to implement the behavior you need using the 
-repositories.
+Keep repositories free of business logic: no hashing, no permission checks, no
+orchestration across tables. A repository never calls another repository or a
+service — combining entities is the service's job.
+
+**Do not use a repository from a route.** Routes go through services, and the
+service uses the repositories it needs. See `apps/backend/AGENTS.md` for the full
+layering rules.

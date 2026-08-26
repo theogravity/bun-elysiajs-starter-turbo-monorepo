@@ -1,5 +1,26 @@
 # fastify-starter-turbo-monorepo
 
+## Aug-26-2026
+
+- **Breaking:** Upgrade to TypeScript 7 (native Go compiler)
+  - Replace removed `moduleResolution: "node"` (node10) with `"bundler"` in the shared tsconfig
+  - Remove the removed `baseUrl` option; `paths` entries now carry the `./src/` prefix
+  - Set `rootDir` explicitly on the backend — TS 7 no longer infers it from the input files
+  - Add `types: ["node"]` and `@types/node` to `backend-errors` — TS 7 no longer auto-includes every `@types` package
+  - Add `src/vite-env.d.ts` to the frontend — TS 7 defaults `noUncheckedSideEffectImports` to `true`, which rejects `import "./styles.css"` without it
+- **Breaking:** Upgrade to Vite 8 (Rolldown/Oxc) and `@vitejs/plugin-react` 6 (Oxc-based Fast Refresh, no Babel)
+- **Breaking:** Upgrade Kysely to 0.29 — `Migrator`/`MigrationProvider` now import from `kysely/migration`, and the package is ESM-only
+- **Breaking:** Upgrade `@dotenvx/dotenvx` to 2, `uuid` to 14, `nanoid` to 6, `@commitlint/*` to 21, `@types/node` to 26, `syncpack` to 15, `@testcontainers/postgresql` to 12, `@testing-library/jest-dom` to 7 (adds the now-required `@testing-library/dom` peer)
+- Migrate the remaining pnpm references to Bun and pin Bun 1.4.0
+  - CI now uses `oven-sh/setup-bun` instead of `pnpm/action-setup` + `actions/setup-node`
+  - lefthook hooks run `bun install` / `bun run …`
+- Add root `lint`, `test`, and `lint:packages` scripts that CI and the pre-push hook already referenced
+- Use `import.meta.dirname` in the frontend Vite/Vitest configs (Vite 8's native config loader does not support `__dirname`)
+- Remove the unsupported `tailwindConfig` key from the frontend Biome config — no released Biome accepts it
+- Remove the `turbo gen` scaffolding generators (`apps/backend/turbo/`), the `@turbo/gen` dependency, the `generate` turbo task, and the `// Do not remove this comment:` plop anchors they inserted at
+- Document the backend's route -> service -> repository layering in `AGENTS.md`, including where each kind of logic belongs and how to add a feature end-to-end now that scaffolding is gone
+- Package updates across the board
+
 ## Jan-31-2026
 
 - **Breaking:** Migrate from pnpm to Bun workspaces

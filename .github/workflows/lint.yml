@@ -11,27 +11,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Use pnpm
-        uses: pnpm/action-setup@v3
+      - name: Use Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 10.28.2
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'pnpm'
+          bun-version: 1.4.0
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
+        run: bun install --frozen-lockfile
 
       - name: Build workspace packages
-        run: pnpm build
+        run: bun run build
 
       - name: Run package checking
-        run: pnpm run lint:packages
+        run: bun run lint:packages
 
       - name: Run type checking
-        run: pnpm run verify-types
+        run: bun run verify-types
 
       - name: Run linting
-        run: pnpm run lint
+        run: bun run lint

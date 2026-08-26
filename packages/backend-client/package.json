@@ -2,8 +2,8 @@
   "name": "@internal/backend-client",
   "description": "Type-safe client for the backend API via Eden Treaty",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
+  "private": true,
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -19,13 +19,13 @@
     "verify-types": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@elysiajs/eden": "1.4.8",
-    "elysia": "1.4.27"
+    "@elysiajs/eden": "1.4.9",
+    "elysia": "1.4.30"
   },
   "devDependencies": {
     "@internal/backend": "workspace:*",
     "@internal/tsconfig": "workspace:*",
     "hash-runner": "4.0.0",
-    "tsdown": "0.21.0"
+    "tsdown": "0.22.14"
   }
 }

@@ -20,7 +20,7 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - Sample REST tests using Vitest.
 - Sample database migrations and repositories using Kysely.
 - Shared error handler package for consistent API error responses.
-- Code generators using `turbo gen` to scaffold new API endpoints and database tables.
+- Layered backend architecture (routes -> services -> repositories) documented in `apps/backend/AGENTS.md`.
 
 ## Packages
 
@@ -106,14 +106,6 @@ turbo test
 
 ```bash
 turbo build
-```
-
-## Generate scaffolding
-
-Generators for new API endpoints + tests and database tables + repositories:
-
-```bash
-turbo gen
 ```
 
 ## Using the API Client

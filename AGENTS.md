@@ -25,7 +25,7 @@ bun-elysiajs-starter-turbo-monorepo/
 
 ### Technology Stack
 
-- **Runtime**: Bun (>= 1.0.0)
+- **Runtime**: Bun (>= 1.4.0)
 - **Backend Framework**: ElysiaJS
 - **Frontend**: React 19, Vite, TanStack Router, TanStack Query, Tailwind CSS
 - **Database**: PostgreSQL with Kysely (type-safe query builder)
@@ -76,15 +76,21 @@ bun run clean:turbo        # Remove .turbo directories only
 bun run clean:dist         # Remove dist directories only
 ```
 
-## Code Generation
+## Backend Architecture
 
-Use `turbo gen` to generate boilerplate code:
+The backend is layered and requests flow in one direction:
 
-```bash
-turbo gen
+```
+route (src/api/**) -> service (src/services/**) -> repository (src/db/repositories/**) -> Postgres
 ```
 
-See `apps/backend/AGENTS.md` for details on available generators.
+**Routes call services; services call repositories. Routes never call
+repositories directly.** `ApiContext` exposes only `log` and `services`, so a
+route handler has no path to a repository — needing one means a service method is
+missing.
+
+See `apps/backend/AGENTS.md` for the full breakdown of each layer, where a given
+piece of logic belongs, and how to add a feature end-to-end.
 
 ## Build Dependencies
 

@@ -16,8 +16,7 @@
           "fix": "unsafe",
           "options": {
             "attributes": ["class", "className"],
-            "functions": ["clsx", "cva", "cn", "tw"],
-            "tailwindConfig": "./src/styles.css"
+            "functions": ["clsx", "cva", "cn", "tw"]
           }
         }
       }

@@ -24,7 +24,6 @@
     "verify-types": {},
     "prod": {
       "persistent": true
-    },
-    "generate": {}
+    }
   }
 }

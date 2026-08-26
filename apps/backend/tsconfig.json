@@ -3,11 +3,11 @@
   "include": ["src/**/*"],
   "compilerOptions": {
     "outDir": "./dist",
+    "rootDir": "./src",
     "module": "NodeNext",
     "moduleResolution": "node16",
-    "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["./src/*"]
     }
   }
 }

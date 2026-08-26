@@ -33,166 +33,240 @@ bun run db:migrate:latest  # Run all pending migrations
 bun run db:migrate:undo    # Rollback last migration
 ```
 
-## Code Generation (Scaffolding)
+## Architecture
 
-Run `turbo gen` from the repo root to access these generators.
-
-### 1. API Route (`api:route`)
-
-Creates a complete REST endpoint with route, schema, and tests.
-
-**Prompts:**
-1. Resource folder name (plural, e.g., "users")
-2. HTTP method (GET, POST, PUT, DELETE, PATCH)
-3. Route path (e.g., "/noun" or "/:id")
-4. Operation name (e.g., "createUser")
-
-**Generated files:**
-- `src/api/{resource}/{operation-name}.route.ts` - Route with schema and handler
-- `src/api/{resource}/__tests__/{operation-name}.test.ts` - Test file
-- Updates `src/api/{resource}/index.ts` and `src/api/routes.ts`
-
-### 2. Database Table (`db:table`)
-
-Creates database table with repository, types, and migration.
-
-**Prompts:**
-1. Table name (singular, camelCase, e.g., "product")
-
-**Generated files:**
-- `src/db/repositories/{table-name}s.repository.ts`
-- `src/db/types/{table-name}s.db-types.ts`
-- `src/db/migrations/{timestamp}-create-{table-name}s-table.ts`
-- Updates type index, repository index, and context injection
-
-### 3. Service (`service`)
-
-Creates a business logic service class.
-
-**Prompts:**
-1. Service name (PascalCase, e.g., "UserProfiles")
-
-**Generated files:**
-- `src/services/{service-name}.service.ts`
-- Updates `src/services/index.ts` and context injection
-
-## Project Architecture
-
-### API Structure
-
-Routes are organized by resource in `src/api/{resource}/`:
+The backend is layered, and requests flow in exactly one direction:
 
 ```
-src/api/
-├── users/
-│   ├── index.ts                          # Elysia plugin registering all user routes
-│   ├── create-email-user.route.ts        # POST /users/email
-│   └── __tests__/
-│       └── create-email-user.route.test.ts
-└── routes.ts                             # Main router registering all resources
+HTTP request
+  └─> route          src/api/**            validation, response shaping
+        └─> service   src/services/**       business logic, transactions
+              └─> repository  src/db/repositories/**   Kysely queries
+                    └─> Postgres
 ```
 
-### Route File Structure
+**The rule: routes call services, services call repositories. A route must never
+call a repository directly.** If a route needs data, it asks a service for it, and
+the service is responsible for reaching the database.
 
-Each route file exports an Elysia instance with schemas and a handler:
+This is not just a convention — it is enforced by the shape of `ApiContext`
+(`src/api-lib/context.ts`). The context exposes `log` and `services` only.
+Repositories are constructed inside `ApiContext.init()` and handed to services;
+they are never attached to the context. There is no `ctx.repos` in a route
+handler. If you find yourself wanting one, that is the signal to add a service
+method instead.
+
+### Layer responsibilities
+
+| Layer | Lives in | May use | Must never |
+|-------|----------|---------|------------|
+| Route | `src/api/{resource}/` | `ctx.services.*`, `log` | Touch `db`, Kysely, SQL, or a repository; hold business rules |
+| Service | `src/services/` | `this.repos.*`, `this.services.*`, `this.db`, `this.log` | Import Elysia types or shape HTTP responses |
+| Repository | `src/db/repositories/` | The `db` handle passed into each method | Call another repository or a service; hold business rules |
+
+### Repository layer (`src/db/repositories/`)
+
+Repositories are the only place that talks to the database. One repository per
+table, extending `BaseRepository` (which provides `log`).
 
 ```typescript
-import { Elysia, t } from "elysia";
-import { contextPlugin } from "@/plugins/context.plugin.js";
+export class UsersRepository extends BaseRepository {
+  async createUser({ db, user }: { db: Kysely<Database>; user: NewUser }): Promise<UserDb> {
+    return db.insertInto("users").values(user).returningAll().executeTakeFirstOrThrow();
+  }
 
-const CreateUserRequestSchema = t.Object({
-  // ... fields with validation
-});
-
-const CreateUserResponseSchema = t.Object({
-  // ... fields
-});
-
-export const createUserRoute = new Elysia()
-  .use(contextPlugin)
-  .post(
-    "/",
-    async ({ body, ctx, log }) => {
-      // Handler logic - return response directly
-      return { id: "..." };
-    },
-    {
-      body: CreateUserRequestSchema,
-      response: CreateUserResponseSchema,
-      detail: {
-        operationId: "createUser",
-        tags: ["user"],
-        description: "Create a user",
-      },
-    },
-  );
+  async getUserById({ db, userId }: { db: Kysely<Database>; userId: string }): Promise<UserDb | undefined> {
+    return db.selectFrom("users").selectAll().where("id", "=", userId).executeTakeFirst();
+  }
+}
 ```
 
-Key differences from the Fastify pattern:
+Note that **every method takes `db` as an explicit parameter** rather than reading
+a stored connection. That is deliberate: it lets a service pass a transaction
+handle so several repository calls join the same transaction. Keep this pattern
+when adding methods.
+
+A repository contains query-builder calls and nothing else — no password hashing,
+no permission checks, no orchestration across tables. It never reaches for another
+repository or a service; combining entities is the service's job.
+
+### Service layer (`src/services/`)
+
+Services own the business logic and the transaction boundary. They extend
+`BaseService`, which provides `log`, `db`, `repos`, and `services`.
+
+```typescript
+export class UsersService extends BaseService {
+  async createEMailUser({ user, email, password }: { user: NewUser; email: string; password: string }): Promise<UserDb> {
+    const pass = await bcrypt.hash(password, 12);
+
+    let u;
+
+    await this.db.transaction().execute(async (db) => {
+      u = await this.repos.users.createUser({ db, user });
+
+      await this.repos.userProviders.createUserProvider({
+        db,
+        userProvider: {
+          providerType: UserProviderType.EMail,
+          providerAccountId: email,
+          passwordAlgo: PasswordAlgo.BCrypt12,
+          passwordHash: pass,
+          userId: u.id,
+        },
+      });
+    });
+
+    return u;
+  }
+}
+```
+
+This is the layering in miniature: hashing the password is business logic, writing
+to two tables atomically is orchestration, and the `db` handle from
+`this.db.transaction()` is threaded into each repository call so both writes share
+one transaction.
+
+Services may call sibling services through `this.services`. That property is
+populated after construction by `withServices()` in `ApiContext.init()`, which is
+what lets two services reference each other without a circular constructor
+dependency.
+
+Services return domain and DB types. They do not import Elysia, do not set status
+codes, and do not build HTTP response bodies.
+
+### Route layer (`src/api/`)
+
+Routes are Elysia instances that validate input, call exactly one service entry
+point, and map the result onto the declared response schema.
+
+```typescript
+export const createEMailUserRoute = new Elysia().use(contextPlugin).post(
+  "/email",
+  async ({ body, ctx, log }) => {
+    const { familyName, givenName, password, email } = body;
+
+    log?.info(`Creating e-mail user: ${email}`);
+
+    // one call into the service layer — never into ctx.repos
+    const user = await ctx.services.users.createEMailUser({
+      user: { givenName, familyName },
+      email,
+      password,
+    });
+
+    const response: CreateEMailUserResponse = {
+      user: { id: user.id, givenName: user.givenName, familyName: user.familyName },
+      provider: { userId: user.id, providerType: UserProviderType.EMail, accountId: email },
+    };
+
+    return response;
+  },
+  {
+    body: CreateEMailUserRequestSchema,
+    response: CreateEMailUserResponseSchema,
+    detail: {
+      operationId: "createEMailUser",
+      tags: ["user"],
+      description: "Create an e-mail-based account",
+    },
+  },
+);
+```
+
+Route conventions:
+
 - Routes are Elysia instances, not async functions
-- `.use(contextPlugin)` is required for `ctx` and `log` type access
+- `.use(contextPlugin)` is required for `ctx` and `log` to be typed
 - The contextPlugin is a singleton — safe to `.use()` in multiple files
 - Handlers return the response directly (no `reply.send()`)
+- Schemas use `t` from `elysia` (TypeBox-based) and are declared as named constants
 - OpenAPI metadata goes in the `detail` field
-- Schemas use `t` from `elysia` (TypeBox-based)
+- Map DB rows to the response explicitly; do not return a DB row as-is
 
-### Resource Registration
+### Where does this logic go?
 
-Resource index files (`src/api/users/index.ts`) group routes with a prefix:
+| You want to... | Put it in |
+|----------------|-----------|
+| Validate the shape of a request body | Route schema (`t.Object({...})`) |
+| Reject a request the user is not allowed to make | Service |
+| Hash a password, generate a token, compute a derived value | Service |
+| Write to two tables atomically | Service (open the transaction, pass `db` down) |
+| Add a `WHERE` clause or a join | Repository |
+| Convert a DB row into the API response shape | Route |
+| Reuse logic across two routes | Service method |
+| Reuse a query across two services | Repository method |
+
+### Request context
+
+The `contextPlugin` (`src/plugins/context.plugin.ts`) uses `@loglayer/elysia` for
+request-scoped logging and `.resolve()` to build an `ApiContext` per request. The
+plugin uses `.as("global")` so the types propagate to every consumer.
+
+`ApiContext.init()` is the composition root: it constructs the repositories,
+passes them into the services via `serviceParams`, then calls `withServices()` on
+each service. Routes see only `ctx.log` and `ctx.services`.
+
+For work outside a request (scripts, jobs), `getRequestlessContext()` returns a
+singleton context with no request-scoped data attached.
+
+### Resource registration
+
+Resource index files (`src/api/users/index.ts`) group routes under a prefix:
 
 ```typescript
-import { Elysia } from "elysia";
-import { createUserRoute } from "./create-user.route.js";
-
 export const userRoutes = new Elysia({ prefix: "/users" })
-  .use(createUserRoute);
+  .use(createEMailUserRoute);
 ```
 
 The main router (`src/api/routes.ts`) aggregates all resources:
 
 ```typescript
-import { Elysia } from "elysia";
-import { userRoutes } from "./users/index.js";
-
 export const routes = new Elysia()
   .use(apiModels)
   .use(userRoutes);
 ```
 
-### Service Layer
+## Adding a feature end-to-end
 
-Services in `src/services/` contain business logic:
+There is no scaffolding generator — create the files directly, working from the
+database outward. Each step names the registration you must not forget.
 
-```typescript
-export class UserProfilesService extends BaseService {
-  async updateProfile(userId: string, data: ProfileData) {
-    // Business logic here
-  }
-}
-```
-
-Access via `ctx.services.userProfiles` in route handlers.
-
-### Repository Layer
-
-Repositories in `src/db/repositories/` handle database operations:
+**1. Table** — add a migration (`bun run db:migrate:create`) and a types file at
+`src/db/types/{name}s.db-types.ts`:
 
 ```typescript
-export class UsersRepository extends BaseRepository {
-  async createUser(data: NewUser): Promise<UserDb> {...}
-  async getUserById(id: string): Promise<UserDb | null> {...}
+export interface WidgetsTable {
+  id: Generated<string>;
+  name: string;
+  createdAt: GeneratedAlways<Date>;
 }
+
+export type WidgetDb = Selectable<WidgetsTable>;
+export type NewWidget = Insertable<WidgetsTable>;
+export type WidgetUpdate = Updateable<WidgetsTable>;
 ```
 
-### Context Injection
+Register the table on the `Database` interface in `src/db/types/index.ts`.
 
-The `contextPlugin` (`src/plugins/context.plugin.ts`) uses `@loglayer/elysia` for request-scoped logging and `.resolve()` to provide an `ApiContext` per request containing:
-- Database instance
-- All repositories
-- All services
-- Request-scoped logger
+**2. Repository** — add `src/db/repositories/{name}s.repository.ts` extending
+`BaseRepository`, with `db` as an explicit parameter on every method. Add it to
+the `Repositories` interface in `src/db/repositories/index.ts` and instantiate it
+in `ApiContext.init()`.
 
-The plugin uses `.as("global")` to propagate types to all consumers.
+**3. Service** — add `src/services/{name}.service.ts` extending `BaseService`. Add
+it to the `Services` interface in `src/services/index.ts` and instantiate it in
+`ApiContext.init()`.
+
+**4. Route** — add `src/api/{resource}/{operation}.route.ts`, register it in
+`src/api/{resource}/index.ts`, and register the resource in `src/api/routes.ts`.
+
+**5. Test** — add `src/api/{resource}/__tests__/{operation}.route.test.ts` and
+drive it through `testApi` (see Testing below).
+
+Skipping a layer is not a shortcut: a route with no service still needs one, even
+if the service method only forwards to a single repository call. The indirection
+is what keeps business logic out of the HTTP layer as the endpoint grows.
 
 ## Testing
 

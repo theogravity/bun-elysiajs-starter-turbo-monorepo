@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { Kysely, Migrator, PostgresDialect } from "kysely";
+import { Kysely, PostgresDialect } from "kysely";
+import { Migrator } from "kysely/migration";
 import { Pool } from "pg";
 import { TypeScriptFileMigrationProvider } from "@/test-utils/ts-migration-transpiler.js";
 
