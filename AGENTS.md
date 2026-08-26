@@ -220,4 +220,7 @@ syncpack, runs `turbo run lint:staged` on staged files.
 **Pre-push:** `turbo run verify-types` and `turbo run lint`.
 
 CI (`.github/workflows/`) runs build, syncpack lint, type checking, lint, and the
-full test suite on every pull request.
+full test suite on every pull request **and on every push to `main`**. The push
+trigger matters here: this repo is worked on by committing directly to `main`, and
+the pre-push hook only covers `verify-types` and `lint` — without it, tests and the
+build would never run anywhere.

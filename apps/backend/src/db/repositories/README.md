@@ -11,6 +11,9 @@ Keep repositories free of business logic: no hashing, no permission checks, no
 orchestration across tables. A repository never calls another repository or a
 service — combining entities is the service's job.
 
+Return `undefined` for a missing row (`executeTakeFirst`). Deciding whether a
+missing row is an error is the service's call, not the repository's.
+
 **Do not use a repository from a route.** Routes go through services, and the
 service uses the repositories it needs. See `apps/backend/AGENTS.md` for the full
 layering rules.
