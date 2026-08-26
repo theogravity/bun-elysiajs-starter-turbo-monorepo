@@ -219,8 +219,27 @@ syncpack, runs `turbo run lint:staged` on staged files.
 
 **Pre-push:** `turbo run verify-types` and `turbo run lint`.
 
-CI (`.github/workflows/`) runs build, syncpack lint, type checking, lint, and the
-full test suite on every pull request **and on every push to `main`**. The push
-trigger matters here: this repo is worked on by committing directly to `main`, and
-the pre-push hook only covers `verify-types` and `lint` — without it, tests and the
+## CI
+
+`.github/workflows/` runs build, syncpack lint, type checking, lint, and the full
+test suite on every pull request **and on every push to `main`**. The push trigger
+matters here: this repo is worked on by committing directly to `main`, and the
+pre-push hook only covers `verify-types` and `lint` — without it, tests and the
 build would never run anywhere.
+
+Two conventions in those workflows are deliberate, so do not "tidy" them:
+
+- **Actions are pinned to commit SHAs**, with the version in a trailing comment
+  (`uses: actions/checkout@3d3c42e5… # v7.0.1`). A floating tag like `@v7` can be
+  force-moved by whoever controls the upstream repo, which is a real supply-chain
+  attack path. Never replace a SHA with a version tag. Dependabot
+  (`.github/dependabot.yml`) raises a monthly PR that updates the SHA and its
+  comment together.
+- **Each workflow declares `permissions: contents: read`.** The jobs only clone and
+  run checks. Declaring it in the workflow rather than relying on the repository
+  setting means the restriction survives this template being copied into another
+  org, where the default may be read/write.
+
+Dependabot manages the actions only. JavaScript dependencies are pinned exactly and
+updated together with `bun run syncpack:update`, which keeps versions consistent
+across the workspace — per-package Dependabot PRs would fight with that.
