@@ -186,6 +186,21 @@ to delete. **Authentication is not scaffolding** — Better Auth, its migration,
 the auth screens are the template. Everything else — the layering, the plugins, the error contract,
 the test setup, the typed client, and all three `packages/` — is the template.
 
+## Deploying
+
+```bash
+docker build -t backend .              # the API as a self-contained binary
+docker build --target migrate -t backend-migrate .   # migrations, run separately
+```
+
+Migrations need the Bun runtime rather than the compiled binary, so they ship as a
+separate image to run as a job or init container. The server handles `SIGTERM` and
+closes the pool, and `/health` checks the database for readiness probes. See
+`AGENTS.md` for the details.
+
+The frontend is a static build (`apps/frontend/dist`); set `VITE_API_URL` at build
+time.
+
 ## Documentation for agents
 
 `AGENTS.md` at the repo root is the entry point and links to per-package docs

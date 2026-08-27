@@ -14,7 +14,7 @@ preserve.
 | Session storage | Rows in `sessions`, revocable, with a cookie the browser sends. |
 | CORS | Restricted to `FRONTEND_URL` with `credentials: true`, because cookie auth cannot use a wildcard origin. |
 | Email verification | **Off.** `emailVerified` is stored but nothing sends mail. Enable it before trusting an address. |
-| Rate limiting | **None.** Sign-in and sign-up can be brute forced. |
+| Rate limiting | Better Auth's own, **on in production only** (60s window, 100 requests). Off in development. Needs proxy configuration to be per-client — see below. |
 | Transport | Plain HTTP locally. No HTTPS enforcement or HSTS. |
 | Secret management | `BETTER_AUTH_SECRET` from `.env`. Fine locally; use a real secret store in production, and never ship the example value. |
 | Input validation | Every route validates through an Elysia `t` schema. Better Auth validates its own endpoints. |
@@ -50,8 +50,28 @@ update users set role = 'admin' where email = 'you@example.com';
 Impersonation is enabled. It is genuinely useful and genuinely dangerous; disable it
 or restrict it before production if you do not need it.
 
+## Rate limiting behind a proxy
+
+Better Auth resolves the client IP from `x-forwarded-for` by default. If it cannot
+resolve one it logs:
+
+> Rate limiting could not determine a client IP and is falling back to a single
+> shared per-path bucket.
+
+A shared bucket means one noisy client can exhaust the limit for everyone, and no
+single client is actually limited. Behind a load balancer, set the header your proxy
+is known to send, in `src/lib/auth.ts`:
+
+```typescript
+advanced: { ipAddress: { ipAddressHeaders: ["x-real-ip"] } }
+```
+
+Only trust a header your proxy overwrites — clients can forge `x-forwarded-for` if
+nothing sanitizes it. `trustedProxies` is the alternative when the chain is known.
+
 ## Before deploying anywhere shared
 
-Turn on email verification; add rate limiting to the auth endpoints; enforce HTTPS;
+Turn on email verification; configure the client-IP header so rate limiting is
+per-client; enforce HTTPS;
 move `BETTER_AUTH_SECRET` into a secret store; restrict CORS to real origins; and
 decide whether impersonation should exist at all.

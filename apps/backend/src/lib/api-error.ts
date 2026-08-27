@@ -34,6 +34,10 @@ export function apiErrorBody({ logLevel = "debug", ...params }: ApiErrorShort): 
 
   if (!error.doNotLog) {
     getLogger()
+      // `child()` first: `withContext` mutates the instance it is called on, so
+      // setting errId on the shared logger would leave it attached to every later
+      // line, including successful requests and the shutdown message.
+      .child()
       .withContext({ errId: error.errId })
       // ApiError types logLevel as a string union; LogLayer wants its own LogLevel
       // enum. The values line up, but the nominal types do not.

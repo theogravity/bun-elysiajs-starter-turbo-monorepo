@@ -1,0 +1,18 @@
+# Build inputs only — everything else bloats the context and busts layer caching.
+node_modules
+**/node_modules
+dist
+**/dist
+.turbo
+**/.turbo
+**/.hashes.json
+.git
+.github
+.idea
+.claude
+*.md
+**/*.md
+.env
+**/.env
+**/.env.local
+docker-compose.yaml

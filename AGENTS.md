@@ -306,6 +306,42 @@ dependency, so nothing else needs configuring.
 Finish with `bun run syncpack:format && bun install`, then `turbo build` to
 confirm the new package builds in the right order.
 
+## Deploying
+
+`Dockerfile` builds the API as a single self-contained binary:
+
+```bash
+docker build -t backend .
+docker run --rm -p 3080:3080 --env-file apps/backend/.env backend
+```
+
+Three things about it are load-bearing:
+
+- **`runtime` is the last stage on purpose.** `docker build` with no `--target`
+  builds the final stage, and the common case should be the server rather than the
+  migration job.
+- **Migrations are a separate image.** They are TypeScript run through kysely-ctl,
+  so they need the Bun runtime and the source tree, not the compiled binary. Build
+  `--target migrate` and run it as a job or init container before rolling out a new
+  `runtime`:
+
+  ```bash
+  docker build --target migrate -t backend-migrate .
+  docker run --rm --env-file apps/backend/.env backend-migrate
+  ```
+
+- **`bun build --compile` is why dynamic imports are banned.** It cannot see through
+  them, so the module is left out of the binary and fails at runtime with
+  "Cannot find package".
+
+The image runs as an unprivileged user and the server handles `SIGTERM`, closing the
+pool before exit, so a rolling deploy drains rather than drops connections. Point
+your orchestrator's readiness probe at `/health`, which checks the database; `/` is
+a cheaper liveness check that only proves the process is up.
+
+The frontend is a static Vite build (`turbo build` → `apps/frontend/dist`). Serve it
+from any static host or CDN, and set `VITE_API_URL` at build time.
+
 ## Verification
 
 Run all three after any change, and fix failures before moving on:

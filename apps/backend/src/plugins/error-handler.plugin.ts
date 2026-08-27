@@ -47,9 +47,14 @@ export const errorHandlerPlugin = new Elysia({ name: "error-handler" })
     // is an unexpected failure. Must be checked before `code`, see the note above.
     if (error instanceof ApiError) {
       if (!error.doNotLog) {
-        log.withContext({ errId: error.errId }).errorOnly(error, {
-          logLevel: error.logLevel as any,
-        });
+        // `child()` first — `withContext` mutates the logger it is called on, and
+        // this id must not leak onto unrelated lines afterwards.
+        log
+          .child()
+          .withContext({ errId: error.errId })
+          .errorOnly(error, {
+            logLevel: error.logLevel as any,
+          });
       }
 
       // isInternalError hides the real cause from the client but keeps it in the
@@ -99,7 +104,10 @@ export const errorHandlerPlugin = new Elysia({ name: "error-handler" })
       causedBy: error,
     });
 
-    log.withContext({ errId: internalError.errId }).errorOnly(error as Error);
+    log
+      .child()
+      .withContext({ errId: internalError.errId })
+      .errorOnly(error as Error);
 
     set.status = internalError.statusCode;
 

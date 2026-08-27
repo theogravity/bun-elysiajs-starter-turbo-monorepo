@@ -29,6 +29,15 @@ export const authOptions = {
     enabled: true,
   },
 
+  // Rate limiting is Better Auth's own and is on in production only. Behind a proxy
+  // it cannot resolve a client IP on its own and falls back to one shared bucket
+  // per path, which limits nobody in particular. Set the header your proxy is known
+  // to overwrite before deploying — a client can forge `x-forwarded-for` otherwise:
+  //
+  //   advanced: { ipAddress: { ipAddressHeaders: ["x-real-ip"] } }
+  //
+  // See https://www.better-auth.com/docs/concepts/rate-limit
+
   // Better Auth defaults to quoted camelCase columns and a table literally named
   // "user". Mapped here to plural snake_case so its tables follow the same
   // convention as the rest of the schema and stay readable through the
