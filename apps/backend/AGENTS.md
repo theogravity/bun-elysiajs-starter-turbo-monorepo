@@ -535,6 +535,58 @@ in two ways, both deliberate:
 Test code is still type-checked: `bun run verify-types` uses the unrestricted
 `tsconfig.json`.
 
+## Logging
+
+LogLayer, via `@loglayer/elysia`. The plugin builds a **request-scoped** child
+logger per request and attaches a `requestId`, so lines from one request can be
+grouped no matter which layer emitted them.
+
+| Layer | Logger | Use it for |
+|-------|--------|------------|
+| Route | `log` from the handler context | What was asked for, at `info` |
+| Service | `this.log` from `BaseService` | Outcomes and decisions, usually `debug` |
+| Repository | `this.log` exists but stays unused | Nothing. Queries are noise; the service owns the narrative |
+| Outside a request | `getLogger()` | Scripts, jobs, the error handler |
+
+**Prefer structured metadata to interpolated strings.** The fields stay queryable
+and the message stays constant:
+
+```typescript
+log?.withMetadata({ userId }).info("Fetching user");     // good
+log?.info(`Fetching user: ${userId}`);                   // avoid
+```
+
+`log` is optional on the handler context (`log?.`) because a route composed without
+`contextPlugin` would not have it.
+
+The same request id flows from the route into the services it calls, because
+`ApiContext` is built from the request logger:
+
+```
+INFO  Creating e-mail user  context.requestId=YT6oxbRkigv9 metadata.email=...
+DEBUG Created e-mail user   context.requestId=YT6oxbRkigv9 metadata.userId=...
+```
+
+Errors are logged for you — `apiErrorBody` and the global handler both log with the
+error's `errId`. Do not log an error and then also return or throw it, or it lands
+in the log twice.
+
+### Logging during tests
+
+Logging is disabled globally under `IS_TEST`. Turn it on for one test:
+
+```typescript
+import { enableLoggingForTest } from "@/test-utils/logging.js";
+
+enableLoggingForTest();               // or generateTestFacets({ withLogging: true })
+```
+
+It restores itself when the test ends, so output does not leak into the rest of the
+file. It must be called **before** the request: `@loglayer/elysia` derives the child
+logger as the request arrives, and a child derived from a disabled parent stays
+silent for that request's lifetime. That is why this is a plain function call rather
+than a request header — the header-based version could not work.
+
 ## Testing
 
 Tests use **Vitest** with **Testcontainers**, which starts a PostgreSQL container
@@ -586,7 +638,6 @@ infrastructure worth keeping.
 | Header | Purpose |
 |--------|---------|
 | `test-user-id` | Sets `userId` to simulate an authenticated user |
-| `test-logging-enabled` | `"true"` enables server logging for that request |
 
 These are handled by `src/test-utils/plugins/` and exist only in tests. Server
 logging is off by default to keep output readable.

@@ -38,7 +38,7 @@ export const createEMailUserRoute = new Elysia().use(contextPlugin).post(
   async ({ body, ctx, log }) => {
     const { familyName, givenName, password, email } = body;
 
-    log?.info(`Creating e-mail user: ${email}`);
+    log?.withMetadata({ email }).info("Creating e-mail user");
 
     const user = await ctx.services.users.createEMailUser({
       user: {

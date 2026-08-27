@@ -243,6 +243,21 @@ schema at the time they were written; `causedBy` in `ApiError`, which accepts an
 throwable; and casts where a third-party type is missing or too narrow. Comment those
 at the call site so the next reader knows it was deliberate rather than lazy.
 
+## Logging
+
+Both apps use LogLayer. Pass fields as structured metadata rather than interpolating
+them into the message, so the message stays constant and the fields stay queryable:
+
+```typescript
+log?.withMetadata({ userId, limit }).info("Listing users");   // good
+log?.info(`Listing users for ${userId}, limit ${limit}`);     // avoid
+```
+
+Use the logger nearest the work: `log` from the handler context in a route,
+`this.log` in a service, `getLogger()` outside a request. Repositories do not log.
+Errors are logged by the error handler — do not log an error and then also raise or
+return it.
+
 ## JSDoc Comments
 
 All public classes, methods, and functions should have JSDoc comments that describe:

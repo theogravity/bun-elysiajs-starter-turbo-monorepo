@@ -2,6 +2,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { API_URL } from "@/lib/api";
+import { getLogger } from "@/lib/logger";
 import { queryClient } from "@/lib/query-client";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
@@ -19,6 +21,12 @@ declare module "@tanstack/react-router" {
     router: typeof router;
   }
 }
+
+// Which backend this build talks to is the first thing you want to know when the
+// app is pointed at the wrong environment.
+getLogger()
+  .withMetadata({ apiUrl: API_URL, mode: import.meta.env.MODE })
+  .info("Starting frontend");
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");

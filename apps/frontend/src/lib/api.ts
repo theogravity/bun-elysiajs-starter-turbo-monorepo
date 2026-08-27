@@ -1,4 +1,5 @@
 import { createBackendClient } from "@internal/backend-client";
+import { getLogger } from "@/lib/logger";
 
 /**
  * Base URL of the backend API. Override it per-environment with `VITE_API_URL`
@@ -71,7 +72,17 @@ export async function unwrap<T>(
   const { data, error } = await request;
 
   if (error) {
-    throw new BackendRequestError(error.status, error.value);
+    const failure = new BackendRequestError(error.status, error.value);
+
+    // Logged here so every failed call is recorded once, whoever made it. `errId`
+    // is the backend's identifier for this exact failure — quoting it in a bug
+    // report is what lets someone find the matching server-side log line.
+    getLogger()
+      .withMetadata({ status: failure.status, code: failure.code, errId: failure.errId })
+      .withError(failure)
+      .error("Backend request failed");
+
+    throw failure;
   }
 
   return data as T;

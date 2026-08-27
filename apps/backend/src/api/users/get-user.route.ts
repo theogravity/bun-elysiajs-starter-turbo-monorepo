@@ -28,7 +28,9 @@ export const getUserRoute = new Elysia()
     async ({ params, ctx, log, status }) => {
       const { userId } = params;
 
-      log?.info(`Fetching user: ${userId}`);
+      // Structured metadata rather than an interpolated string: the fields stay
+      // queryable, and `log` is request-scoped so the request id is attached for you.
+      log?.withMetadata({ userId }).info("Fetching user");
 
       const user = await ctx.services.users.getUserById({ userId });
 

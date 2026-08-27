@@ -182,6 +182,30 @@ const mutation = useMutation({
 });
 ```
 
+## Logging
+
+LogLayer, configured in `src/lib/logger.ts`. Use structured metadata rather than
+interpolated strings, so fields stay queryable:
+
+```typescript
+import { getLogger } from "@/lib/logger";
+
+getLogger().withMetadata({ userId }).info("Opened user detail");
+```
+
+Two things already log, and you should not duplicate them:
+
+- **`unwrap()` logs every failed backend call** with the response `status`, the
+  backend error `code`, and its `errId`. That id is the backend's identifier for the
+  same failure, so quoting it in a bug report is what lets someone find the matching
+  server-side line. Components do not need to log a caught query error again.
+- **`main.tsx` logs the API base URL at startup**, which is the first thing worth
+  knowing when the app is pointed at the wrong environment.
+
+Logging is disabled when `import.meta.env.MODE === "test"`, mirroring the backend,
+so test output stays readable. Call `logger.enableLogging()` inside a test that needs
+to see it.
+
 ## Routing
 
 Routes are file-based; `@tanstack/router-plugin` regenerates `routeTree.gen.ts` on

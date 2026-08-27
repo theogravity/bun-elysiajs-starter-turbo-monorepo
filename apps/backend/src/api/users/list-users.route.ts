@@ -43,7 +43,7 @@ export const listUsersRoute = new Elysia()
       const limit = query.limit ?? 25;
       const offset = query.offset ?? 0;
 
-      log?.info(`Listing users: limit=${limit} offset=${offset}`);
+      log?.withMetadata({ limit, offset }).info("Listing users");
 
       const { users, total } = await ctx.services.users.listUsers({ limit, offset });
 

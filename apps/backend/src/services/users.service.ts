@@ -21,10 +21,10 @@ export class UsersService extends BaseService {
   }): Promise<UserDb> {
     const pass = await bcrypt.hash(password, 12);
 
-    // Return the row from inside the transaction callback: `execute()` resolves to
+    // Take the row from inside the transaction callback: `execute()` resolves to
     // whatever the callback returns. Assigning to an outer `let` instead would give
     // it type `UserDb | undefined`, since the compiler cannot prove the callback ran.
-    return this.db.transaction().execute(async (db) => {
+    const createdUser = await this.db.transaction().execute(async (db) => {
       const created = await this.repos.users.createUser({
         db,
         user,
@@ -43,6 +43,15 @@ export class UsersService extends BaseService {
 
       return created;
     });
+
+    // `this.log` comes from BaseService and is the request-scoped logger, so this
+    // line carries the same request id as the route's. Services log outcomes and
+    // decisions; repositories do not log at all.
+    this.log
+      .withMetadata({ userId: createdUser.id, providerType: UserProviderType.EMail })
+      .debug("Created e-mail user");
+
+    return createdUser;
   }
 
   /**
