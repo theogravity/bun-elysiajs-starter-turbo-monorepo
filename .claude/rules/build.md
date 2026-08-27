@@ -22,20 +22,13 @@ Treaty — `treaty<App>` applied to the `App` type the backend exports — so th
 shape is derived from the route definitions at type-check time. There is no codegen
 step and nothing to commit.
 
-The catch is that this only works if the backend has emitted `.d.ts` files.
-`apps/backend` builds with `tsconfig.build.json` (`declaration: true`) for exactly
-this reason. If that output is missing, `@internal/backend` resolves to plain
-JavaScript and `App` would become `any` — a client that still compiles while having
-lost all type safety.
+This only works if the backend emitted its `.d.ts` files, which is why `turbo build`
+matters after a route change. Symptoms that the build is missing or stale:
 
-`noImplicitAny: true` in the shared tsconfig is what stops that being silent: the
-missing declaration is reported as
-`TS7016: Could not find a declaration file for module '@internal/backend'`.
+- `TS7016: Could not find a declaration file for module '@internal/backend'`
+- The type `"Please install Elysia before using Eden"` in an error message
+- A newly added route missing from the client
 
-Symptoms that the build is missing or stale:
-
-- `TS7016` on `@internal/backend`
-- The type `"Please install Elysia before using Eden"` appears in an error message
-- A newly added route is missing from the client
-
-The fix is always `turbo build`.
+The fix is always `turbo build`. Why it fails this way, and why `noImplicitAny`
+makes it loud rather than silent, is explained in `AGENTS.md` under "Build order and
+why it matters".

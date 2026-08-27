@@ -24,14 +24,13 @@ test suite, so a new migration needs no test wiring.
 
 ## Columns are snake_case
 
-The application registers Kysely's `CamelCasePlugin` (`src/db/index.ts`), which
-translates between the two naming styles at query time. Migrations are the one
-place that sees the real column names:
+Migrations are the one place that sees real column names: write `given_name`,
+`created_at`, `user_id`. Everywhere else — table interfaces, query builders — is
+camelCase, and Kysely's `CamelCasePlugin` translates between them.
 
-- Migration: `given_name`, `created_at`, `user_id`
-- Table interface and query builder: `givenName`, `createdAt`, `userId`
-
-A camelCase column name in a migration will compile and then fail at runtime.
+**A camelCase column name in a migration compiles and then fails at runtime.**
+There is no type error for a column the database does not have. See
+`apps/backend/AGENTS.md`, "The database is snake_case, the TypeScript is camelCase".
 
 ## House style
 

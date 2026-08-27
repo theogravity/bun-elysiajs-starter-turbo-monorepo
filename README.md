@@ -157,33 +157,19 @@ bun run syncpack:update
 
 The `users` resource is **example scaffolding**, not a feature. It exists to show the
 layering working end to end — migration → repository → service → route → test, plus a
-React page consuming the typed client. Replace it with your own domain.
+React page consuming the typed client. Replace it with your own domain rather than
+building on top of it.
 
-Safe to delete once you have your own resource:
+`AGENTS.md` has the full breakdown under
+[Example scaffolding vs. project infrastructure](AGENTS.md): exactly which files are
+scaffolding, which are infrastructure worth keeping, the registrations to clean up
+when you delete one, and two things that bite (deleting `index.tsx` leaves `/`
+unrouted, and removing a route breaks the typed `<Link>` in `__root.tsx`).
 
-- `apps/backend/src/db/migrations/0001-init.ts` (the `users` / `user_providers` tables)
-- `apps/backend/src/db/types/users.db-types.ts`, `user-providers.db-types.ts`
-- `apps/backend/src/db/repositories/users.repository.ts`, `user-providers.repository.ts`
-- `apps/backend/src/services/users.service.ts`
-- `apps/backend/src/api/users/`
-- `apps/backend/src/schema/user.type.ts`, `user-provider.type.ts`, `enums.type.ts`
-- `apps/frontend/src/routes/users.tsx` and `__tests__/-users.test.tsx`
-- `apps/frontend/src/routes/index.tsx` — replace its contents rather than deleting the
-  file, or `/` will have no route
-
-Removing one also means removing its registration — in the `Database`, `Repositories`,
-and `Services` interfaces, in `ApiContext`, in `apiModels`, and in `src/api/routes.ts`.
-On the frontend, delete the matching `<Link>` in `__root.tsx` at the same time:
-TanStack types `to` against the generated route tree, so a link to a route you just
-removed becomes a type error.
-
-Keep everything else. In particular the layering and `ApiContext`, the context and
-error-handler plugins, `apiErrorBody` and the shared `ApiErrorResponse` schema, the
-Testcontainers test setup, the frontend's `src/lib/api.ts` client, and all three
-`packages/`.
-
-One caveat: `testFramework.generateTestFacets()` inserts into `users` to build test
-fixtures. Adapt it to your schema rather than deleting it.
+The short version: the `users` and `user_providers` files across
+`apps/backend/src/` and the example pages under `apps/frontend/src/routes/` are
+yours to delete. Everything else — the layering, the plugins, the error contract,
+the test setup, the typed client, and all three `packages/` — is the template.
 
 ## Documentation for agents
 

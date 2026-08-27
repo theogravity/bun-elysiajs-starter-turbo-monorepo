@@ -218,18 +218,12 @@ export const userRoutes = new Elysia({ prefix: "/users" })
 
 ## Method Chaining
 
-Elysia's type inference depends on unbroken method chaining. Never split a chain across
-statements — the types silently degrade:
+Elysia's type inference depends on unbroken method chaining. Never split a chain
+across statements — the types degrade silently, with no error:
 
-**Do this:**
-```typescript
-const app = new Elysia().use(contextPlugin).use(apiModels).get("/", handler);
-```
-
-**Not this:**
 ```typescript
 const app = new Elysia();
-app.use(contextPlugin);   // type information is lost
+app.use(contextPlugin);   // wrong: type information is lost here
 app.get("/", handler);
 ```
 
@@ -271,7 +265,8 @@ async getUserById({ userId }: { userId: string }): Promise<UserDb | undefined> {
 
 ## Returning Errors, Not Throwing Them
 
-Expected failures are **returned** from a route, not thrown:
+Expected failures are **returned** from a route, never thrown, and
+`throw new Error()` is never correct:
 
 ```typescript
 if (!user) {
@@ -279,10 +274,8 @@ if (!user) {
 }
 ```
 
-Only a returned status is checked against the route's `response` schema and narrowed
-by status code for Eden Treaty clients. Throwing bypasses both. Reserve `throwApiError`
-for genuinely unexpected failures — violated invariants, or errors raised deep in a
-call chain where threading a result back would obscure the code. Never `throw new Error()`.
+Why, when to throw instead, and the available codes are documented once in
+`apps/backend/AGENTS.md` under "Error handling".
 
 ## Interface Property Documentation
 

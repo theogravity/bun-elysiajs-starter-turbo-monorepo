@@ -373,22 +373,15 @@ failure that is not part of the endpoint's contract.
 **Never `throw new Error()`.** It produces a generic 500 with no code for the
 client to branch on.
 
-### Codes and statuses
+### Codes and options
 
-| Code | Status |
-|------|--------|
-| `BAD_REQUEST`, `INPUT_VALIDATION_ERROR` | 400 |
-| `INVALID_CREDENTIALS` | 401 |
-| `ACCESS_DENIED` | 403 |
-| `NOT_FOUND_ERROR` | 404 |
-| `EXISTS_ERROR` | 409 |
-| `INTERNAL_SERVER_ERROR` | 500 |
+The code determines the HTTP status. `apiErrorBody` and `throwApiError` take the
+same options — the important one is `metadataSafe` (returned to the client) versus
+`metadata` (logged only, never serialized out).
 
-Options shared by `apiErrorBody` and `throwApiError`: `metadataSafe` is returned
-to the client, `metadata` is logged only, `causedBy` attaches the underlying
-error, `isInternalError` returns a generic 500 while logging the real cause under
-the same `errId`, `logLevel` sets the log level, `doNotLog` suppresses logging for
-something already logged.
+The full code-to-status table and every option are documented next to the enum, in
+[`packages/backend-errors/README.md`](../../packages/backend-errors/README.md). Do
+not restate them here; a copy of that table will drift from the enum.
 
 ### The error handler (`src/plugins/error-handler.plugin.ts`)
 
@@ -530,20 +523,17 @@ singleton context with no request-scoped data attached.
 
 ## Build output
 
-`bun run build` uses `tsconfig.build.json`, which excludes tests and `test-utils`
-and sets `declaration: true`. **The declarations are load-bearing**: without them
-`@internal/backend` resolves to plain JavaScript and `App` degrades to `any`,
-which would produce an untyped Eden client whose calls still compile.
+`bun run build` uses `tsconfig.build.json` rather than `tsconfig.json`. It differs
+in two ways, both deliberate:
 
-The shared tsconfig sets `noImplicitAny: true` specifically to stop that failing
-quietly — a missing declaration now surfaces as
-`TS7016: Could not find a declaration file for module '@internal/backend'`
-rather than a silently untyped client. If you see that, or the type
-`"Please install Elysia before using Eden"`, run `turbo build`.
+- **`declaration: true`.** The emitted `.d.ts` files are what `@internal/backend-client`
+  and the frontend consume. Never turn this off — the root `AGENTS.md` section
+  "Build order and why it matters" explains what breaks when they are missing.
+- **Tests and `test-utils` are excluded**, because the inferred type of `testApi`
+  cannot be named portably in a declaration file and the build fails on it.
 
-Tests and `test-utils` are excluded from the build because the inferred type of
-`testApi` cannot be named portably in a declaration file. `bun run verify-types`
-uses the unrestricted `tsconfig.json`, so test code is still type-checked.
+Test code is still type-checked: `bun run verify-types` uses the unrestricted
+`tsconfig.json`.
 
 ## Testing
 

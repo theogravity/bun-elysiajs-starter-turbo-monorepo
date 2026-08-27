@@ -26,18 +26,14 @@ rebuilt. There is nothing to regenerate and nothing to keep in sync by hand.
 
 ## The build dependency that matters
 
-`tsdown` inlines the backend's `App` type into `dist/index.d.ts`, which means
-consumers do not need `@internal/backend` themselves. But that inlining only works
-if the backend actually emitted declarations.
+`tsdown` inlines the backend's `App` type into `dist/index.d.ts`, so consumers do
+not need `@internal/backend` themselves. That inlining only works if the backend
+actually emitted declarations.
 
-`apps/backend` builds with `tsconfig.build.json`, which sets `declaration: true`.
-Without it, `@internal/backend` resolves to plain JavaScript, `App` silently
-becomes `any`, and Eden produces an untyped client — calls to routes that do not
-exist still compile. The visible symptom is the type
-`"Please install Elysia before using Eden"`.
-
-So: **run `turbo build` after changing backend routes.** The Turbo pipeline orders
-`@internal/backend` before this package before the frontend.
+**Run `turbo build` after changing backend routes.** If the client loses its types
+— unknown routes stop erroring, or you see `"Please install Elysia before using
+Eden"` — that is why. The mechanism is documented in the root
+[`AGENTS.md`](../../AGENTS.md) under "Build order and why it matters".
 
 ## Consuming from an app
 

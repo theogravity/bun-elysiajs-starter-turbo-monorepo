@@ -1,19 +1,14 @@
 # Database repositories
 
-Each repository owns database access for a single table. Repositories are the only
-place in the backend that builds queries.
+One repository per table. This is the only layer that builds queries.
 
-Every method takes the `db` handle as an explicit parameter rather than reading a
-stored connection, so a service can pass a transaction handle and have several
-repository calls share one transaction.
+Two rules that are easy to get wrong:
 
-Keep repositories free of business logic: no hashing, no permission checks, no
-orchestration across tables. A repository never calls another repository or a
-service — combining entities is the service's job.
+- **Every method takes `db` as an explicit parameter** rather than reading a stored
+  connection, so a service can pass a transaction handle and have several calls
+  share one transaction. Keep this when adding methods.
+- **Return `undefined` for a missing row** (`executeTakeFirst`). Whether that is an
+  error is the service's decision, not the repository's.
 
-Return `undefined` for a missing row (`executeTakeFirst`). Deciding whether a
-missing row is an error is the service's call, not the repository's.
-
-**Do not use a repository from a route.** Routes go through services, and the
-service uses the repositories it needs. See `apps/backend/AGENTS.md` for the full
-layering rules.
+No business logic, no calls to another repository or a service, and never used
+directly from a route. Full layering rules: `apps/backend/AGENTS.md`.

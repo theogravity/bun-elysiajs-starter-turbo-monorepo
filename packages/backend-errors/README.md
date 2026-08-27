@@ -4,69 +4,26 @@ The error type used across the API. Every failed request in the backend produces
 an `ApiError`, and the backend's global error handler serializes it into one
 uniform response body.
 
-## Two ways to produce an error
+## What this package exports
 
-Every failed request in the backend returns the same body. How you produce it
-depends on whether the failure is part of the endpoint's contract.
+| Export | Use |
+|--------|-----|
+| `BackendErrorCodes` | The error code enum. The code determines the HTTP status and the default message. |
+| `createApiError(opts)` | Builds an `ApiError` and returns it, without raising. |
+| `throwApiError(opts)` | Builds one and throws it. Returns `never`, so TypeScript narrows after the call — a `if (!x) throwApiError(...)` guard leaves `x` non-nullable with no cast. |
+| `ApiError` | The error class. Carries `errId`, `code`, `statusCode`, metadata, and the serializers below. |
+| `getErrorStatusCode`, `getErrorMessage` | Look up the status or default message for a code. |
 
-### Expected failures — build the body and return it
+**Never `throw new Error()` in backend code.** It produces a generic 500 with no
+code for the client to branch on.
 
-For a failure the endpoint is designed to produce, the route returns it via
-Elysia's `status()`. Use `apiErrorBody` from
-`apps/backend/src/lib/api-error.ts`, which wraps `createApiError`:
-
-```typescript
-import { BackendErrorCodes } from "@internal/backend-errors";
-import { apiErrorBody } from "@/lib/api-error.js";
-
-if (!user) {
-  return status(
-    404,
-    apiErrorBody({
-      code: BackendErrorCodes.NOT_FOUND_ERROR,
-      message: "No user exists with that ID",
-      metadataSafe: { userId },
-    }),
-  );
-}
-```
-
-Returning rather than throwing is what lets Elysia check the body against the
-route's `response` schema and lets Eden Treaty clients narrow `error.value` by
-status code. A thrown error gets neither.
-
-### Unexpected failures — throw
-
-For a violated invariant, or a failure deep in a call chain where threading a
-result back would obscure the code:
-
-```typescript
-import { BackendErrorCodes, throwApiError } from "@internal/backend-errors";
-
-throwApiError({
-  code: BackendErrorCodes.INTERNAL_SERVER_ERROR,
-  message: "Ledger and cache disagree after write",
-  metadata: { ledgerId },
-  isInternalError: true,
-});
-```
-
-The global error handler catches it and serializes it identically.
-`throwApiError` returns `never`, so TypeScript narrows after the call:
-
-```typescript
-if (!record) {
-  throwApiError({ code: BackendErrorCodes.INTERNAL_SERVER_ERROR });
-}
-
-record.id; // non-nullable here, no cast needed
-```
-
-**Never `throw new Error()`.** It produces a generic 500 with no code for the
-client to branch on.
-
-Use `createApiError` directly when you need the error as a value — to attach it as
-a `causedBy` or collect it in a batch result — rather than raising or returning it.
+**Choosing between returning and throwing is a policy decision, not a package
+one**, and it is documented once in
+[`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) under "Error handling".
+In short: expected failures are returned by the route with Elysia's `status()`,
+using the `apiErrorBody` helper in `apps/backend/src/lib/api-error.ts` (which wraps
+`createApiError`); `throwApiError` is for unexpected failures. Read that section
+before adding an error path.
 
 ## Codes and statuses
 
@@ -121,11 +78,8 @@ a route's `response` map to document the failure in OpenAPI.
 
 ## Note on Elysia integration
 
-Elysia's documented pattern for custom errors — registering the class with
-`.error({ API_ERROR: ApiError })` and switching on the narrowed `code` in
-`onError` — **does not work with this class**. Elysia derives the error code from
-the thrown error's own `code` property, and `ApiError.code` is already a
-`BackendErrorCodes` value. Registration yields `code === "NOT_FOUND_ERROR"` rather
-than `"API_ERROR"`, so such a switch silently falls through to the 500 branch.
-`apps/backend/src/plugins/error-handler.plugin.ts` uses an `instanceof` check
-instead, and that check must run before any check on `code`.
+`ApiError` has its own `code` property, which Elysia treats as the error code. That
+makes Elysia's documented `.error({ API_ERROR: ApiError })` registration pattern
+unusable here, and the global handler discriminates with `instanceof` instead. The
+full explanation is in [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md)
+under "The error handler" — read it before changing that file.
