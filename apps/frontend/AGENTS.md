@@ -51,7 +51,9 @@ src/
 ├── routes/
 │   ├── __tests__/
 │   │   ├── -notes.test.tsx   # Route test. The `-` prefix is required.
-│   │   └── -root.test.tsx    # Nav and not-found behaviour
+│   │   ├── -root.test.tsx    # Nav and not-found behaviour
+│   │   ├── -signin.test.tsx  # Form validation and server errors
+│   │   └── -devtools.test.tsx # Guards the devtools condition
 │   ├── __root.tsx       # Root layout, session-aware nav, devtools
 │   ├── index.tsx        # /
 │   ├── signin.tsx       # /signin
@@ -394,6 +396,22 @@ error.
 ## Testing
 
 Vitest with happy-dom and React Testing Library.
+
+### Devtools are off in tests
+
+`__root.tsx` mounts the router and query devtools only when
+`import.meta.env.DEV && import.meta.env.MODE !== "test" && !navigator.webdriver`.
+
+They inject buttons labelled "Open match details for /forgot-password" and similar,
+which land in the accessibility tree — with them mounted,
+`getByLabel("Password")` matches three elements. That surfaced as six failing
+end-to-end tests before it was fixed.
+
+Both conditions matter. `MODE !== "test"` covers Vitest; `!navigator.webdriver`
+covers Playwright, which runs a normal build in a real browser. happy-dom happens to
+report `webdriver` as true, so either would work today — but jsdom reports false, so
+relying on one alone would let devtools reappear in the DOM under assertion if the
+environment changed. `-devtools.test.tsx` guards it.
 
 `src/test-setup.ts` does two things that both exist because `globals` is off in the
 Vitest config:

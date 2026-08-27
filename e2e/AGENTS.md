@@ -56,10 +56,11 @@ collide with `turbo watch dev` — or with an unrelated project on 5432.
 Each spec signs up its own user with `uniqueEmail`, so specs are independent and can
 run in parallel against one database. Do not depend on data another spec created.
 
-**Use `{ exact: true }` on `getByLabel`.** Without it `getByLabel("Password")` also
-matches the router devtools' `aria-label="Open match details for /forgot-password"`.
-Devtools are hidden under automation (`navigator.webdriver` in `__root.tsx`), but
-exact labels keep the tests robust against any future stray label.
+**Use `{ exact: true }` on `getByLabel`.** Devtools are already hidden under
+automation — `__root.tsx` checks `MODE !== "test"` and `!navigator.webdriver` — but
+exact labels keep the tests robust against any other stray `aria-label`. Without
+them, `getByLabel("Password")` once matched three elements and took six tests down
+with it.
 
 ### Asserting on email
 

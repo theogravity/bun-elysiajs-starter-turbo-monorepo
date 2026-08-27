@@ -44,14 +44,25 @@ function ErrorBoundary({ error }: { error: Error }) {
 }
 
 /**
- * Devtools are hidden under browser automation.
+ * Devtools render only in an interactive development session.
  *
- * They render buttons carrying labels like "Open match details for
- * /forgot-password", which land in the accessibility tree and collide with
- * ordinary queries — `getByLabel("Password")` matches three elements. Hiding them
- * for automated runs keeps end-to-end selectors about the app.
+ * They inject buttons labelled "Open match details for /forgot-password" and the
+ * like. Those land in the accessibility tree, where they collide with ordinary
+ * queries — `getByLabel("Password")` matches three elements with them present.
+ *
+ * Both conditions are deliberate, not redundant:
+ *
+ * - `MODE !== "test"` covers Vitest, which sets `MODE` to `"test"`.
+ * - `!navigator.webdriver` covers Playwright and other browser automation, which
+ *   runs a production-mode build against a real browser where `MODE` is not
+ *   `"test"`.
+ *
+ * happy-dom currently reports `webdriver` as true, so the second check alone
+ * happens to cover unit tests too — but that is an implementation detail, and
+ * jsdom reports false. Relying on it would mean devtools silently reappearing in
+ * the DOM under assertion if the environment ever changed.
  */
-const showDevtools = import.meta.env.DEV && !navigator.webdriver;
+const showDevtools = import.meta.env.DEV && import.meta.env.MODE !== "test" && !navigator.webdriver;
 
 function RootComponent() {
   const { data } = useSession();
