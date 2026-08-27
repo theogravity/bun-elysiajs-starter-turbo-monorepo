@@ -33,8 +33,12 @@ feel free to replace those files.
 - **Route tests live in `src/routes/__tests__/` and must be prefixed with `-`**, or
   the router plugin treats them as routes. They still run; the prefix only excludes
   them from the route tree.
-- **Eden returns `{ data, error }` rather than throwing.** Wrap calls in `unwrap()`
-  from `@/lib/api` so TanStack Query sees failures.
+- **Never call the Eden client from a route or component.** Every endpoint is
+  defined once in `src/api/{resource}.ts`, together with its query keys and
+  `queryOptions` factory; import from there. `src/api/users.ts` is the worked
+  example. Adding an endpoint means editing that module, not a component.
+- **Eden returns `{ data, error }` rather than throwing.** The api module wraps
+  calls in `unwrap()` from `@/lib/api` so TanStack Query sees failures.
 
 ## Finishing
 
@@ -42,6 +46,7 @@ feel free to replace those files.
 bun run verify-types && bun run lint && bun run test
 ```
 
-Keep route files thin — past ~200 lines, extract into `src/hooks/`,
-`src/components/`, or `src/lib/`. Add any new `VITE_` variable to
+Test components by mocking `@/api/{resource}`; stub `fetch` only inside
+`src/api/__tests__/`. Keep route files thin — past ~200 lines, extract into
+`src/hooks/`, `src/components/`, or `src/lib/`. Add any new `VITE_` variable to
 `src/vite-env.d.ts` and `.env.example`. Use Bun, never npm/yarn/pnpm.

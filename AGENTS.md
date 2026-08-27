@@ -135,6 +135,7 @@ in the finished product.
 | `apps/backend/src/services/users.service.ts` | Example service |
 | `apps/backend/src/api/users/**` | Example routes and their tests |
 | `apps/backend/src/schema/user.type.ts`, `user-provider.type.ts`, `enums.type.ts` | Example shared schemas |
+| `apps/frontend/src/api/users.ts` and its test | Example API definitions for the `users` resource |
 | `apps/frontend/src/routes/users.tsx` | Example page |
 | `apps/frontend/src/routes/index.tsx` | Example page — replace its contents; deleting the file leaves `/` unrouted |
 | `apps/frontend/src/routes/__tests__/-users.test.tsx` | Example route test |

@@ -1,23 +1,27 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { UserList } from "@/api/users";
+import { USERS_PAGE_SIZE, userKeys, usersListQuery } from "@/api/users";
 import { routeTree } from "@/routeTree.gen";
 
-/**
- * The Eden client issues ordinary `fetch` calls, so stubbing the global is enough
- * to drive the page without a running backend.
- */
-function mockResponse(body: unknown, status = 200) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        }),
-    ),
+// Mock the API module rather than stubbing `fetch`. The component under test does
+// not care how the request is made, and the transport is covered once in
+// `src/api/__tests__/users.test.ts`.
+vi.mock("@/api/users", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/users")>()),
+  usersListQuery: vi.fn(),
+}));
+
+function mockUsers(data: UserList) {
+  // Built with the real key factory so the mock keeps the shape the component and
+  // the loader expect. A hand-written key would need a cast, which would hide drift.
+  vi.mocked(usersListQuery).mockReturnValue(
+    queryOptions({
+      queryKey: userKeys.list({ limit: USERS_PAGE_SIZE, offset: 0 }),
+      queryFn: async () => data,
+    }),
   );
 }
 
@@ -42,12 +46,12 @@ function renderAt(path: string) {
 }
 
 describe("Users page", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it("renders the users returned by the API", async () => {
-    mockResponse({
+    mockUsers({
       users: [{ id: "11111111-1111-4111-8111-111111111111", givenName: "Ada", familyName: "Lovelace" }],
       total: 1,
     });
@@ -59,7 +63,7 @@ describe("Users page", () => {
   });
 
   it("shows an empty state when there are no users", async () => {
-    mockResponse({ users: [], total: 0 });
+    mockUsers({ users: [], total: 0 });
 
     renderAt("/users");
 

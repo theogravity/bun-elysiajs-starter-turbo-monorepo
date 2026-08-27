@@ -1,30 +1,20 @@
 import { BackendErrorCodes } from "@internal/backend-errors";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { api, BackendRequestError, unwrap } from "@/lib/api";
-
-const PAGE_SIZE = 25;
-
-/**
- * Query options for the user list. Kept next to the route so the key and the
- * fetcher stay in sync; lift it into `src/lib/` once a second route needs it.
- */
-function usersQuery(offset: number) {
-  return {
-    queryKey: ["users", { limit: PAGE_SIZE, offset }] as const,
-    queryFn: () => unwrap(api.users.get({ query: { limit: PAGE_SIZE, offset } })),
-  };
-}
+import { usersListQuery } from "@/api/users";
+import { BackendRequestError } from "@/lib/api";
 
 export const Route = createFileRoute("/users")({
   // `context.queryClient` comes from the router context created in main.tsx.
   // Prefetching in the loader means the component renders with data already warm.
-  loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery(0)),
+  // The loader and the component below share one query definition, so their key
+  // and fetcher cannot drift apart.
+  loader: ({ context }) => context.queryClient.ensureQueryData(usersListQuery()),
   component: UsersPage,
 });
 
 function UsersPage() {
-  const { data, isPending, error } = useQuery(usersQuery(0));
+  const { data, isPending, error } = useQuery(usersListQuery());
 
   if (isPending) {
     return <p className="p-8">Loading users…</p>;

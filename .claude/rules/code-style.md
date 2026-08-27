@@ -63,9 +63,12 @@ Guidelines:
 
 Route files and large components should be thin orchestrators. When a route component grows beyond ~200 lines, extract concerns into separate modules:
 
-- **Data-fetching logic** → custom hooks in `src/hooks/` (e.g., `useUsers.ts`)
+- **Endpoint definitions, query keys, and query options** → `src/api/{resource}.ts`.
+  Routes and components must never call the Eden client directly; see
+  `apps/frontend/AGENTS.md`.
+- **Composite data-fetching logic** → custom hooks in `src/hooks/` (e.g., `useUsers.ts`)
 - **Reusable UI blocks** → components in `src/components/` (e.g., `UserTable.tsx`)
-- **Shared types, constants, and query options** → `src/lib/`
+- **Shared types and constants** → `src/lib/`
 
 Route files should only contain:
 - The route definition (`createFileRoute` + `validateSearch`)

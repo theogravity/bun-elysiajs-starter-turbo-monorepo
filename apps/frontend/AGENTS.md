@@ -29,6 +29,10 @@ calls to succeed.
 
 ```
 src/
+├── api/
+│   ├── users.ts         # every /users call, its query keys and query options
+│   └── __tests__/
+│       └── users.test.ts
 ├── lib/
 │   ├── api.ts           # Eden Treaty client singleton + unwrap() helper
 │   ├── query-client.ts  # QueryClient singleton
@@ -87,24 +91,73 @@ If the client's methods vanish or you see the type
 `"Please install Elysia before using Eden"`, the backend's declarations are
 missing or stale. Run `turbo build`.
 
-### Making a request
+### The `src/api/` layer
 
-Eden resolves to `{ data, error, status }` instead of throwing, which TanStack
-Query cannot detect on its own. `unwrap()` in `src/lib/api.ts` converts a failed
-response into a rejected promise:
+**Components and routes do not call the Eden client directly.** Every endpoint is
+defined once in `src/api/{resource}.ts`, and everything else imports from there.
+One file per backend resource, mirroring `apps/backend/src/api/{resource}/`.
+
+That module owns three things for its resource:
+
+```typescript
+// src/api/users.ts
+export function listUsers(params: ListUsersParams = {}) {   // 1. the call
+  return unwrap(api.users.get({ query: withDefaults(params) }));
+}
+
+export const userKeys = {                                    // 2. the query keys
+  all: ["users"] as const,
+  list: (params) => [...userKeys.all, "list", params] as const,
+  detail: (userId: string) => [...userKeys.all, "detail", userId] as const,
+};
+
+export function usersListQuery(params: ListUsersParams = {}) {  // 3. query options
+  const resolved = withDefaults(params);
+  return queryOptions({ queryKey: userKeys.list(resolved), queryFn: () => listUsers(resolved) });
+}
+```
+
+Why it is worth the indirection:
+
+- **An endpoint change is a one-file change.** A renamed path or a new query
+  parameter is edited here, not hunted for across routes and components.
+- **The key and the fetcher cannot drift.** They are built from the same
+  normalized params in the same function, so `usersListQuery()` and
+  `usersListQuery({ offset: 0 })` produce one cache entry rather than two.
+- **Keys nest under a common prefix**, so `queryClient.invalidateQueries({ queryKey: userKeys.all })`
+  invalidates every query for the resource without a component knowing how keys
+  are shaped.
+- **Tests get simpler.** Components mock the module; only the api module itself
+  needs a stubbed `fetch`. See [Testing](#testing).
+
+### Using it
 
 ```typescript
 import { useQuery } from "@tanstack/react-query";
-import { api, unwrap } from "@/lib/api";
+import { usersListQuery } from "@/api/users";
 
-const { data, isPending, error } = useQuery({
-  queryKey: ["users", { limit, offset }],
-  queryFn: () => unwrap(api.users.get({ query: { limit, offset } })),
-});
+// In a route loader — prefetch so the component renders warm
+loader: ({ context }) => context.queryClient.ensureQueryData(usersListQuery()),
+
+// In the component — same definition, so the same cache entry
+const { data, isPending, error } = useQuery(usersListQuery());
 ```
 
-Call shapes mirror the route tree. Path parameters are expressed by **calling** a
-segment:
+`src/api/users.ts` and `src/routes/users.tsx` are a complete worked example.
+
+### Adding an endpoint
+
+1. Add the call to the matching `src/api/{resource}.ts`, wrapping the Eden call in
+   `unwrap()`. Create the file if the resource is new.
+2. Add a key to that resource's `*Keys` object, and a `queryOptions` factory if it
+   is a query.
+3. Derive response types from the function — `Awaited<ReturnType<typeof listUsers>>`
+   — rather than restating the shape. It then tracks the backend automatically.
+4. Cover the request in `src/api/__tests__/{resource}.test.ts`: assert the method,
+   the path, and the parameters.
+
+Call shapes on the underlying client mirror the route tree, and path parameters are
+expressed by **calling** a segment:
 
 ```typescript
 api.users.get({ query: { limit: 25, offset: 0 } })   // GET  /users
@@ -112,29 +165,17 @@ api.users({ userId }).get()                          // GET  /users/:userId
 api.users.email.post({ givenName, familyName, email, password })  // POST /users/email
 ```
 
-### Handling errors
-
-`unwrap` throws a `BackendRequestError` carrying the backend's error `code`, so
-branch on the code rather than the message:
-
-```typescript
-import { BackendErrorCodes } from "@internal/backend-errors";
-import { BackendRequestError } from "@/lib/api";
-
-if (error instanceof BackendRequestError && error.code === BackendErrorCodes.NOT_FOUND_ERROR) {
-  // ...
-}
-```
-
-Every backend failure has the same body shape: `errId`, `code`, `message`,
-`statusCode`, and optional client-safe `metadata`.
-
 ### Mutations
 
+The mutation function comes from the api module too, and invalidation uses the key
+factory rather than a literal:
+
 ```typescript
+import { createEMailUser, userKeys } from "@/api/users";
+
 const mutation = useMutation({
-  mutationFn: (input: CreateUserInput) => unwrap(api.users.email.post(input)),
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+  mutationFn: createEMailUser,
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),
 });
 ```
 
@@ -219,22 +260,57 @@ function createTestRouter(initialPath = "/") {
 }
 ```
 
-Mock the network by stubbing the global `fetch` — the Eden client issues ordinary
-`fetch` calls, so no backend needs to be running:
+### Two layers, two ways to fake the network
+
+Test the transport once, in the api module. Everything above it mocks that module.
+
+**`src/api/__tests__/{resource}.test.ts` — stub `fetch`.** This is the only place
+that should. Assert the method, path, and parameters, so a changed endpoint fails
+here rather than mysteriously in a component test:
 
 ```typescript
-vi.stubGlobal("fetch", vi.fn(async () =>
-  new Response(JSON.stringify({ users: [], total: 0 }), {
+vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+  captured.push({ method: init?.method ?? "GET", url: new URL(input as string) });
+  return new Response(JSON.stringify({ users: [], total: 0 }), {
     status: 200,
     headers: { "content-type": "application/json" },
-  })));
+  });
+}));
+
+await listUsers();
+expect(captured[0]?.url.pathname).toBe("/users");
 ```
 
 Call `vi.unstubAllGlobals()` in `afterEach`.
 
+**Component and route tests — mock `@/api/{resource}`.** No `Response` objects, no
+URLs, no coupling to how the request is made:
+
+```typescript
+vi.mock("@/api/users", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/users")>()),
+  usersListQuery: vi.fn(),
+}));
+
+vi.mocked(usersListQuery).mockReturnValue(
+  queryOptions({
+    queryKey: userKeys.list({ limit: USERS_PAGE_SIZE, offset: 0 }),
+    queryFn: async () => ({ users: [], total: 0 }),
+  }),
+);
+```
+
+Build the mocked key with the real key factory. A hand-written key needs a cast to
+typecheck, and the cast is exactly what would hide a drifted key.
+
+Note that partially mocking a module only replaces its **exports**. `usersListQuery`
+calls `listUsers` through a module-local binding, so mocking `listUsers` alone would
+not affect it — mock the function the component actually imports.
+
 ## Constraints
 
 - Never edit `routeTree.gen.ts`; it is generated and Biome-ignored
+- Never call the Eden client from a route or component; go through `src/api/`
 - Keep route files thin. Past ~200 lines, extract data fetching into
   `src/hooks/`, reusable UI into `src/components/`, and shared types or query
   options into `src/lib/`

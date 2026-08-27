@@ -167,8 +167,8 @@ when you delete one, and two things that bite (deleting `index.tsx` leaves `/`
 unrouted, and removing a route breaks the typed `<Link>` in `__root.tsx`).
 
 The short version: the `users` and `user_providers` files across
-`apps/backend/src/` and the example pages under `apps/frontend/src/routes/` are
-yours to delete. Everything else — the layering, the plugins, the error contract,
+`apps/backend/src/`, plus `apps/frontend/src/api/users.ts` and the example pages
+under `apps/frontend/src/routes/`, are yours to delete. Everything else — the layering, the plugins, the error contract,
 the test setup, the typed client, and all three `packages/` — is the template.
 
 ## Documentation for agents
