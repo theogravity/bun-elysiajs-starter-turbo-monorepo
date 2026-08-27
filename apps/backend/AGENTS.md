@@ -17,6 +17,8 @@ See the root `AGENTS.md` for monorepo-wide commands and build ordering.
 
 - API server: http://localhost:3080
 - OpenAPI docs: http://localhost:3080/docs
+- Readiness: http://localhost:3080/health — checks the database. `GET /` is a
+  cheaper liveness check that only proves the process is up.
 - PGAdmin: http://localhost:5050
 
 ## Commands
@@ -33,12 +35,15 @@ bun run compile            # Bytecode-compiled single binary
 bun run prod               # Run the compiled build
 ```
 
-### Database migrations
+### Database migrations and seeds
 
 ```bash
 bun run db:migrate:create  # Create a new migration
 bun run db:migrate:latest  # Run all pending migrations
 bun run db:migrate:undo    # Roll back the last migration
+bun run db:seed:create     # Scaffold a seed
+bun run db:seed:run        # Run seeds
+bun run auth:schema        # Check the DB against what Better Auth expects
 ```
 
 ## Conventions you will get wrong if you don't read this
@@ -433,6 +438,8 @@ import time; a missing required variable throws on boot.
 | `BETTER_AUTH_SECRET` | yes | — | Signs session cookies. `openssl rand -base64 32` |
 | `BETTER_AUTH_URL` | no | `http://localhost:3080` | Public origin of this API |
 | `FRONTEND_URL` | no | `http://localhost:5173` | Origin allowed to send credentialed requests |
+| `SEED_ADMIN_EMAIL` | no | `admin@example.com` | Bootstrap admin created by `db:seed:run` |
+| `SEED_ADMIN_PASSWORD` | no | `changeme12345` | Bootstrap admin password |
 
 `NODE_ENV` drives `IS_PROD` and `IS_TEST`. Tests do not read `.env` — the
 Testcontainers global setup injects the database variables before anything reads
@@ -636,9 +643,20 @@ const { user, headers } = await testFramework.generateTestFacets();
 const { status } = await testApi.notes.get({ query: { limit: 25, offset: 0 }, headers });
 ```
 
-Pass `{ asAdmin: true }` to promote the user, which is the one place that writes to
-a Better Auth table directly — the admin endpoints require an existing admin, so the
-first one cannot be made through the API.
+Pass `{ asAdmin: true }` to promote the user. The admin endpoints require an
+existing admin, so the first one cannot be made through the API — outside tests,
+`bun run db:seed:run` handles that bootstrap.
+
+### Seeding
+
+`src/db/seeds/0001-admin-user.ts` creates the first admin: it signs the user up
+through Better Auth, so the password is hashed and the account row is written
+exactly as a real sign-up would, then sets the role directly. It is idempotent, and
+the credentials come from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
+
+It is also the worked example of **doing work outside a request**:
+`getRequestlessContext()` returns the same services a route would get, with a logger
+that has no request attached. Use it for scripts, jobs, and seeds.
 
 ## Logging
 
@@ -751,6 +769,22 @@ expect((error?.value as { code?: string })?.code).toBe(BackendErrorCodes.NOT_FOU
 ```
 
 Assert on `code`, not on the message — messages are free to change.
+
+### Testing a service directly
+
+Route tests cover the HTTP contract; a business rule is usually clearer tested
+against the service. `getRequestlessContext()` gives you the services outside a
+request:
+
+```typescript
+const { notes } = getRequestlessContext().services;
+
+await expect(notes.getOwnedNote({ userId: otherId, noteId })).resolves.toBeUndefined();
+```
+
+`src/services/__tests__/notes.service.test.ts` is the worked example. Prefer it for
+rules like ownership, where asserting on a status code would obscure what is being
+tested.
 
 ### Writing tests
 

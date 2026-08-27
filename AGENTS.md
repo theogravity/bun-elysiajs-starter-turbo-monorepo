@@ -90,6 +90,7 @@ Per-package scripts are documented in that package's `AGENTS.md`.
 | Service | URL |
 |---------|-----|
 | API server | http://localhost:3080 |
+| Readiness probe | http://localhost:3080/health |
 | OpenAPI docs | http://localhost:3080/docs |
 | Frontend | http://localhost:5173 |
 | PGAdmin | http://localhost:5050 |
@@ -104,11 +105,17 @@ docker compose up -d          # Postgres + PGAdmin
 bun run db:migrate:latest
 ```
 
+Then create the first admin, which the admin endpoints cannot do themselves:
+
+```bash
+bun run db:seed:run
+```
+
 Set a real `BETTER_AUTH_SECRET` in `apps/backend/.env` before doing anything beyond
-local development — `openssl rand -base64 32`. To make yourself an admin, sign up
-through the UI and then run
-`update users set role = 'admin' where email = 'you@example.com';`, since the admin
-endpoints require an existing admin.
+local development — `openssl rand -base64 32`.
+
+If port 5432 is already taken, set `POSTGRES_PORT` for compose and `DB_PORT` in
+`apps/backend/.env` to match.
 
 Docker is required for local Postgres and for the backend test suite.
 

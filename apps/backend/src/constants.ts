@@ -41,6 +41,10 @@ export const BETTER_AUTH_URL = env.get("BETTER_AUTH_URL").default("http://localh
 /** Origin allowed to call the API with credentials. The frontend dev server. */
 export const FRONTEND_URL = env.get("FRONTEND_URL").default("http://localhost:5173").asString();
 
+/** Credentials for the bootstrap admin created by `bun run db:seed:run`. */
+export const SEED_ADMIN_EMAIL = env.get("SEED_ADMIN_EMAIL").default("admin@example.com").asString();
+export const SEED_ADMIN_PASSWORD = env.get("SEED_ADMIN_PASSWORD").default("changeme12345").asString();
+
 export const IS_PROD = process.env.NODE_ENV === "production";
 export const IS_TEST = process.env.NODE_ENV === "test";
 export const BACKEND_LOG_LEVEL = env.get("BACKEND_LOG_LEVEL").default("debug").asString();

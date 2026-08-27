@@ -80,6 +80,9 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
    docker compose up -d
    ```
 
+   Already running something on 5432? Set `POSTGRES_PORT` (and `DB_PORT` in
+   `apps/backend/.env`) to a free port — the compose file reads it.
+
 5. Run database migrations:
    ```bash
    bun run db:migrate:latest
@@ -90,9 +93,13 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
    openssl rand -base64 32
    ```
 
-To make yourself an admin, sign up through the UI and then run
-`update users set role = 'admin' where email = 'you@example.com';` — the admin
-endpoints require an existing admin, so the first one is promoted directly.
+7. Create the first admin (the admin endpoints require an existing admin, so the
+   first one is bootstrapped by a seed):
+   ```bash
+   bun run db:seed:run
+   ```
+   Defaults to `admin@example.com` / `changeme12345`; override with
+   `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`.
 
 ## Development
 
@@ -103,6 +110,7 @@ turbo watch dev
 | Service | URL |
 |---|---|
 | API server | http://localhost:3080 |
+| Readiness probe | http://localhost:3080/health |
 | OpenAPI docs | http://localhost:3080/docs |
 | Frontend | http://localhost:5173 |
 | PGAdmin | http://localhost:5050 |

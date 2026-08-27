@@ -11,7 +11,37 @@ export interface RouterContext {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,
+  // Without these, an unknown URL or a thrown render error leaves a blank page.
+  notFoundComponent: NotFound,
+  errorComponent: ErrorBoundary,
 });
+
+function NotFound() {
+  return (
+    <main className="mx-auto max-w-lg p-8">
+      <h1 className="mb-2 font-bold text-2xl">Page not found</h1>
+      <p className="mb-4 text-gray-600">That URL does not match any route.</p>
+      <Link to="/" className="underline">
+        Go home
+      </Link>
+    </main>
+  );
+}
+
+function ErrorBoundary({ error }: { error: Error }) {
+  // `unwrap` has already logged the underlying failure with its errId, so this only
+  // has to render something. Detail is shown because this is a starter; trim it if
+  // your app should not surface internals.
+  return (
+    <main className="mx-auto max-w-lg p-8">
+      <h1 className="mb-2 font-bold text-2xl">Something went wrong</h1>
+      <p className="mb-4 text-red-600">{error.message}</p>
+      <Link to="/" className="underline">
+        Go home
+      </Link>
+    </main>
+  );
+}
 
 function RootComponent() {
   const { data } = useSession();

@@ -16,6 +16,8 @@
     "db:migrate:create": "kysely migrate make",
     "db:migrate:latest": "kysely migrate latest",
     "db:migrate:undo": "kysely migrate down",
+    "db:seed:create": "kysely seed make",
+    "db:seed:run": "kysely seed run",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "compile": "bun build --compile --target=bun --bytecode --minify --sourcemap ./src/index.ts --outfile ./dist/backend",
     "clean": "rm -rf .turbo node_modules dist",

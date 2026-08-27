@@ -273,6 +273,15 @@ regenerated** — run `bun run dev` or `bun run build` after adding one.
 | `src/routes/notes.tsx` | `/notes` |
 | `src/routes/admin/users.tsx` | `/admin/users` |
 
+### Not-found and error handling
+
+`__root.tsx` supplies `notFoundComponent` and `errorComponent`. Without them an
+unknown URL or a thrown render error leaves a blank page. Both are inherited by
+every route, and a route can override either for a local variant.
+
+`errorComponent` only has to render — `unwrap()` has already logged the underlying
+failure with its `errId`.
+
 ### Router context
 
 `main.tsx` creates the router with `{ queryClient }` as context, and `__root.tsx`
@@ -310,11 +319,15 @@ error.
 
 Vitest with happy-dom and React Testing Library.
 
-`src/test-setup.ts` imports `@testing-library/jest-dom/vitest`, **not** the bare
-`@testing-library/jest-dom`. The bare entrypoint assumes a global `expect`, which
-only exists when `globals: true` is set in the Vitest config — it is not set here,
-and using it makes every test file fail to load with `expect is not defined`. The
-`/vitest` entrypoint registers the matchers against Vitest's own `expect`.
+`src/test-setup.ts` does two things that both exist because `globals` is off in the
+Vitest config:
+
+- imports `@testing-library/jest-dom/vitest`, **not** the bare
+  `@testing-library/jest-dom`. The bare entrypoint assumes a global `expect` and
+  makes every test file fail to load with `expect is not defined`.
+- registers `afterEach(cleanup)`. React Testing Library only auto-registers its
+  cleanup when globals are available, so without this the DOM from one test leaks
+  into the next and queries start finding duplicate elements.
 
 Component tests live alongside the component as `Component.test.tsx`. Route tests
 go in `src/routes/__tests__/` and **must be prefixed with `-`**
