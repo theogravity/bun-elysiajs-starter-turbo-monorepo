@@ -155,8 +155,8 @@ type error, not a dead link at runtime.
 Everything else, in particular: the layering and `ApiContext`; `contextPlugin` and
 `errorHandlerPlugin`; `apiErrorBody` and the `ApiErrorResponse` schema; `BaseRepository`
 and `BaseService`; `src/db/index.ts` (the `CamelCasePlugin` registration); the
-Testcontainers setup in `src/test-utils/`; the frontend's `src/lib/api.ts` client and
-`unwrap()`; and all three `packages/`.
+Testcontainers setup in `apps/backend/src/test-utils/`; the frontend's
+`src/lib/api.ts` client, its `src/test-utils/` helpers, and `unwrap()`; and all three `packages/`.
 
 **One coupled piece to watch:** `testFramework.generateTestFacets()` and
 `generateNewUsers()` (`apps/backend/src/test-utils/test-framework/`) create *users* and

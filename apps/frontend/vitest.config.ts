@@ -9,6 +9,9 @@ export default defineConfig({
         environment: "happy-dom",
         include: ["src/**/?(*.)+(spec|test).[jt]s?(x)"],
         setupFiles: ["src/test-setup.ts"],
+        // Restores anything vi.stubGlobal replaced before each test, so a fetch
+        // stub cannot leak between tests in the same file.
+        unstubGlobals: true,
     },
     resolve: {
         alias: {

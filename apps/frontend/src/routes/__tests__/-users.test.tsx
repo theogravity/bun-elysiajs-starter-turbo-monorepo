@@ -1,10 +1,9 @@
-import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { queryOptions } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserList } from "@/api/users";
 import { USERS_PAGE_SIZE, userKeys, usersListQuery } from "@/api/users";
-import { routeTree } from "@/routeTree.gen";
+import { renderRoute } from "@/test-utils/router";
 
 // Mock the API module rather than stubbing `fetch`. The component under test does
 // not care how the request is made, and the transport is covered once in
@@ -25,26 +24,6 @@ function mockUsers(data: UserList) {
   );
 }
 
-function renderAt(path: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
-  const router = createRouter({
-    routeTree,
-    context: { queryClient },
-    history: createMemoryHistory({ initialEntries: [path] }),
-  });
-
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-
-  return { queryClient, router };
-}
-
 describe("Users page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,7 +35,7 @@ describe("Users page", () => {
       total: 1,
     });
 
-    renderAt("/users");
+    renderRoute("/users");
 
     expect(await screen.findByRole("heading", { name: /Users \(1\)/ })).toBeInTheDocument();
     expect(await screen.findByText("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
@@ -65,7 +44,7 @@ describe("Users page", () => {
   it("shows an empty state when there are no users", async () => {
     mockUsers({ users: [], total: 0 });
 
-    renderAt("/users");
+    renderRoute("/users");
 
     expect(await screen.findByText(/No users yet/)).toBeInTheDocument();
   });

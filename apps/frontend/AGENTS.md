@@ -37,6 +37,9 @@ src/
 │   ├── api.ts           # Eden Treaty client singleton + unwrap() helper
 │   ├── query-client.ts  # QueryClient singleton
 │   └── logger.ts        # LogLayer browser logger
+├── test-utils/
+│   ├── fetch.ts         # stubFetch() — only for src/api/ tests
+│   └── router.tsx       # renderRoute() — renders the real route tree
 ├── routes/
 │   ├── __tests__/
 │   │   └── -users.test.tsx   # Route test. The `-` prefix is required.
@@ -263,30 +266,40 @@ function createTestRouter(initialPath = "/") {
 ### Two layers, two ways to fake the network
 
 Test the transport once, in the api module. Everything above it mocks that module.
+`src/test-utils/` holds the shared helpers so no test writes this plumbing itself.
 
-**`src/api/__tests__/{resource}.test.ts` — stub `fetch`.** This is the only place
-that should. Assert the method, path, and parameters, so a changed endpoint fails
-here rather than mysteriously in a component test:
+**`src/api/__tests__/{resource}.test.ts` — `stubFetch` from `@/test-utils/fetch`.**
+This is the only place that should replace `fetch`. Assert the method, path, and
+parameters, so a changed endpoint fails here rather than obscurely in a component
+test:
 
 ```typescript
-vi.stubGlobal("fetch", vi.fn(async (input, init) => {
-  captured.push({ method: init?.method ?? "GET", url: new URL(input as string) });
-  return new Response(JSON.stringify({ users: [], total: 0 }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
-}));
+import { stubFetch } from "@/test-utils/fetch";
+
+const captured = stubFetch({ users: [], total: 0 });
 
 await listUsers();
+
+expect(captured[0]?.method).toBe("GET");
 expect(captured[0]?.url.pathname).toBe("/users");
+expect(captured[0]?.url.searchParams.get("limit")).toBe("25");
 ```
 
-Call `vi.unstubAllGlobals()` in `afterEach`.
+`stubFetch` returns a live array of captured requests. Each has `method`, a parsed
+`url`, `headers`, and `json()` for asserting a POST body. Pass a status for an
+error reply — `stubFetch(body, { status: 404 })` — or a function to vary the reply
+per request.
 
-**Component and route tests — mock `@/api/{resource}`.** No `Response` objects, no
-URLs, no coupling to how the request is made:
+No cleanup is needed: `unstubGlobals` is set in `vitest.config.ts`, so a stub is
+removed before the next test and cannot leak.
+
+**Component and route tests — `renderRoute` from `@/test-utils/router`, and mock
+`@/api/{resource}`.** No `Response` objects, no URLs, no coupling to how the
+request is made:
 
 ```typescript
+import { renderRoute } from "@/test-utils/router";
+
 vi.mock("@/api/users", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/users")>()),
   usersListQuery: vi.fn(),
@@ -298,7 +311,15 @@ vi.mocked(usersListQuery).mockReturnValue(
     queryFn: async () => ({ users: [], total: 0 }),
   }),
 );
+
+renderRoute("/users");
 ```
+
+`renderRoute` builds the real route tree with the same wiring as `main.tsx` —
+`queryClient` in the router context, a `QueryClientProvider` above — with retries
+disabled so a failing query surfaces immediately. It returns everything
+`render()` does plus `queryClient` and `router`, and accepts a `queryClient` if a
+test needs to seed or inspect the cache.
 
 Build the mocked key with the real key factory. A hand-written key needs a cast to
 typecheck, and the cast is exactly what would hide a drifted key.

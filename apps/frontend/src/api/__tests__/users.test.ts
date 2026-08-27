@@ -1,48 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createEMailUser, getUser, listUsers, USERS_PAGE_SIZE, userKeys, usersListQuery } from "@/api/users";
 import { BackendRequestError } from "@/lib/api";
-
-interface Captured {
-  method: string;
-  url: URL;
-  body?: string;
-}
-
-/**
- * Stubs `fetch` and records what was requested. This is the one place that
- * exercises the real transport — components mock `@/api/users` instead, so an
- * endpoint change surfaces here rather than in every component test.
- */
-function stubFetch(response: unknown, status = 200) {
-  const captured: Captured[] = [];
-
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.url;
-      captured.push({
-        method: (init?.method ?? (typeof input === "object" ? input.method : "GET")).toUpperCase(),
-        url: new URL(url),
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-
-      return new Response(JSON.stringify(response), {
-        status,
-        headers: { "content-type": "application/json" },
-      });
-    }),
-  );
-
-  return captured;
-}
+import { stubFetch } from "@/test-utils/fetch";
 
 const emptyPage = { users: [], total: 0 };
 
 describe("users api", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   describe("listUsers", () => {
     it("requests GET /users with the default page size", async () => {
       const captured = stubFetch(emptyPage);
@@ -86,7 +49,7 @@ describe("users api", () => {
     });
 
     it("rejects with a BackendRequestError carrying the backend error code", async () => {
-      stubFetch({ errId: "e1", code: "NOT_FOUND_ERROR", message: "nope", statusCode: 404 }, 404);
+      stubFetch({ errId: "e1", code: "NOT_FOUND_ERROR", message: "nope", statusCode: 404 }, { status: 404 });
 
       await expect(getUser("missing")).rejects.toBeInstanceOf(BackendRequestError);
       await expect(getUser("missing")).rejects.toMatchObject({ code: "NOT_FOUND_ERROR", status: 404 });
@@ -106,7 +69,7 @@ describe("users api", () => {
 
       expect(captured[0]?.method).toBe("POST");
       expect(captured[0]?.url.pathname).toBe("/users/email");
-      expect(JSON.parse(captured[0]?.body ?? "{}")).toMatchObject({ email: "ada@example.com" });
+      expect(captured[0]?.json()).toMatchObject({ email: "ada@example.com" });
     });
   });
 

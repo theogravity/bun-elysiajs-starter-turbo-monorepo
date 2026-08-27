@@ -46,7 +46,8 @@ feel free to replace those files.
 bun run verify-types && bun run lint && bun run test
 ```
 
-Test components by mocking `@/api/{resource}`; stub `fetch` only inside
-`src/api/__tests__/`. Keep route files thin — past ~200 lines, extract into
+Test components with `renderRoute` from `@/test-utils/router` and by mocking
+`@/api/{resource}`; use `stubFetch` from `@/test-utils/fetch` only inside
+`src/api/__tests__/`. Both helpers are shared — do not rewrite them per test. Keep route files thin — past ~200 lines, extract into
 `src/hooks/`, `src/components/`, or `src/lib/`. Add any new `VITE_` variable to
 `src/vite-env.d.ts` and `.env.example`. Use Bun, never npm/yarn/pnpm.
