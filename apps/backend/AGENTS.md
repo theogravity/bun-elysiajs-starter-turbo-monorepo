@@ -796,8 +796,8 @@ and applies all migrations before the suite runs. Docker must be running.
 
 ```bash
 bun run test                                   # everything
-bun run test src/api/users/__tests__/get-user.route.test.ts
-bun run test -t "should return a 404"
+bun run test src/api/notes/__tests__/notes.route.test.ts
+bun run test -t "hides another user's note"
 ```
 
 ### Infrastructure
@@ -813,9 +813,10 @@ bun run test -t "should return a 404"
 ```typescript
 import { testApi } from "@/test-utils/test-server.js";
 
-const { data, error, status } = await testApi.users.email.post({ ... }, { headers });
-const list = await testApi.users.get({ query: { limit: 25, offset: 0 } });
-const one  = await testApi.users({ userId }).get();   // path params are a call
+// `headers` comes from testFramework and carries the session cookie.
+const list = await testApi.notes.get({ query: { limit: 25, offset: 0 }, headers });
+const created = await testApi.notes.post({ title: "First", body: "Hello" }, { headers });
+const one = await testApi.notes({ noteId }).get({ headers });   // path params are a call
 ```
 
 Path parameters are expressed by **calling** the segment, not by string
@@ -841,7 +842,7 @@ Server logging is off by default to keep output readable.
 ### Asserting errors
 
 ```typescript
-const { error, status } = await testApi.users({ userId: unknownId }).get();
+const { error, status } = await testApi.notes({ noteId: unknownId }).get({ headers });
 
 expect(status).toBe(404);
 expect((error?.value as { code?: string })?.code).toBe(BackendErrorCodes.NOT_FOUND_ERROR);
@@ -850,6 +851,9 @@ expect((error?.value as { code?: string })?.code).toBe(BackendErrorCodes.NOT_FOU
 Assert on `code`, not on the message — messages are free to change.
 
 ### Testing a service directly
+
+`.claude/rules/testing.md` has the map of which kind of test to write; this section
+covers the backend's tools.
 
 Route tests cover the HTTP contract; a business rule is usually clearer tested
 against the service. `getRequestlessContext()` gives you the services outside a

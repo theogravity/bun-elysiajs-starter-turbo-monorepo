@@ -1,116 +1,84 @@
 # Testing
 
+## Which test to write
+
+Six kinds, each with a job. Pick the cheapest one that can actually fail for the
+reason you care about.
+
+| Kind | Lives in | Write one when |
+|------|----------|----------------|
+| Service | `apps/backend/src/services/__tests__/` | A business rule — ownership, a derived value, a transaction. No HTTP involved. |
+| Route | `apps/backend/src/api/{resource}/__tests__/` | The HTTP contract: status codes, auth, validation, response shape. |
+| Database | `apps/backend/src/db/__tests__/` | Query behaviour or a schema contract, such as the camelCase mapping. |
+| API layer | `apps/frontend/src/api/__tests__/` | A request's method, path, and parameters. **The only place that stubs `fetch`.** |
+| Component / route | `apps/frontend/src/routes/__tests__/` or beside the component | Rendering, form validation, redirects. Mocks `@/api/{resource}`. |
+| End-to-end | `e2e/tests/` | A seam between the apps: cookies crossing origins, a guard redirecting, an email arriving. |
+
+A business rule tested through a route makes the assertion about a status code
+instead of the rule. Prefer the service test, and let the route test cover that the
+rule is wired to the right status.
+
 ## Commands
 
 ```bash
-turbo test                 # Run tests across all packages
+bun run test                  # everything except e2e, across all packages
+bun run test:e2e              # browser tests (needs Docker + `bun run test:e2e:install` once)
 ```
 
-Per package:
+Within a package:
 
 ```bash
 cd apps/backend
-bun run test                                        # everything
-bun run test src/api/users/__tests__/get-user.route.test.ts   # one file
-bun run test -t "should return a 404"               # by test name
+bun run test                                                   # everything
+bun run test src/api/notes/__tests__/notes.route.test.ts       # one file
+bun run test -t "hides another user's note"                    # by name
 ```
 
-Backend tests need **Docker running** — Testcontainers starts a PostgreSQL container and
-applies all migrations before the suite. A new migration needs no extra test wiring.
+Backend tests need **Docker running** — Testcontainers starts PostgreSQL and applies
+every migration before the suite, so a new migration needs no test wiring.
 
-## End-to-end
+## Where the detail lives
 
-`e2e/` runs Playwright against the real stack — both apps, Postgres, and an SMTP
-server — and covers the seams unit tests cannot: cookies crossing origins, route
-guards, and password reset through a real inbox. It needs Docker and a browser, so
-it is **not** part of `turbo test`:
+This file covers what applies everywhere. For depth, read the doc for the layer you
+are touching rather than a copy here:
 
-```bash
-bun run test:e2e:install   # once
-bun run test:e2e
-```
+- `apps/backend/AGENTS.md` — `testApi`, `testFramework`, authenticated requests, logging in tests
+- `apps/frontend/AGENTS.md` — `renderRoute`, `stubFetch`, mocking the API module, form assertions
+- `e2e/AGENTS.md` — how the stack starts, asserting on email, why Playwright's `webServer` is unused
 
-Add a case there when a change spans both apps or leaves the process. See
-`e2e/AGENTS.md`.
+## Rules that apply everywhere
 
-## Guidelines
+**Always write tests for new features.** Every new service, repository, route, or
+significant function gets one, covering the happy path, edge cases (empty results,
+pagination boundaries), and error conditions.
 
-**Always write tests for new features.** Every new service, repository, route, or significant function should have corresponding tests. Tests should cover:
+**Test files live in `__tests__/` next to the code.** Frontend *route* tests are the
+exception: they go in `src/routes/__tests__/` and **must be prefixed with `-`**
+(`-notes.test.tsx`) so the TanStack Router plugin does not treat them as routes.
+They still run; the prefix only keeps them out of `routeTree.gen.ts`.
 
-- Happy path (expected behavior)
-- Edge cases (empty inputs, null values, pagination boundaries)
-- Error conditions (invalid inputs, not found cases)
-
-Test files live in `__tests__/` directories alongside the code they test:
-```
-src/api/users/
-├── get-user.route.ts
-└── __tests__/
-    └── get-user.route.test.ts
-
-src/services/
-├── users.service.ts
-└── __tests__/
-    └── users.service.test.ts
-```
-
-Frontend component and route tests mock `@/api/{resource}`; only `src/api/__tests__/`
-stubs `fetch`. Frontend route tests are the exception: they go in `src/routes/__tests__/` and **must be
-prefixed with `-`** (`-users.test.tsx`) so the TanStack Router plugin does not treat them as
-routes. They are still collected and run by Vitest; the prefix only excludes them from
-`routeTree.gen.ts`.
-
-## Testing a Service Directly
-
-A business rule reads better tested against the service than through a route, where
-the assertion becomes about a status code. `getRequestlessContext()` gives you the
-services outside a request:
+**Assert on error codes, not messages.** Messages are free to change:
 
 ```typescript
-const { notes } = getRequestlessContext().services;
-
-await expect(notes.getOwnedNote({ userId: otherId, noteId })).resolves.toBeUndefined();
-```
-
-`apps/backend/src/services/__tests__/notes.service.test.ts` is the worked example.
-
-## Testing API Routes
-
-Drive routes through `testApi`, an Eden Treaty client bound directly to the app instance, so
-no network is involved:
-
-```typescript
-import { testApi } from "@/test-utils/test-server.js";
-import { testFramework } from "@/test-utils/test-framework/index.js";
-
-const { user, headers } = await testFramework.generateTestFacets();
-
-const { data, status } = await testApi.users({ userId: user.id }).get();
-
-expect(status).toBe(200);
-expect(data?.user.id).toBe(user.id);
-```
-
-Path parameters are expressed by **calling** the segment, not by string interpolation.
-
-## Asserting Errors
-
-Assert on the error `code`, not the message — messages are free to change:
-
-```typescript
-const { error, status } = await testApi.users({ userId: unknownId }).get();
+const { error, status } = await testApi.notes({ noteId }).get({ headers });
 
 expect(status).toBe(404);
 expect((error?.value as { code?: string })?.code).toBe(BackendErrorCodes.NOT_FOUND_ERROR);
 ```
 
-Note that schema validation failures come back as **400 `INPUT_VALIDATION_ERROR`**, not
-Elysia's native 422 — the global error handler rewrites them so clients only parse one shape.
+Schema validation failures arrive as **400 `INPUT_VALIDATION_ERROR`**, not Elysia's
+native 422 — the global handler rewrites them so clients parse one shape.
 
-## Regressions
+**Reproduce before fixing.** A bug fix starts with a test that fails for the
+reported reason. Several bugs in this repo were only understood once that test
+existed.
 
-When fixing a bug, add a test that reproduces the bug before fixing it.
+**Do not mock what you are testing.** Stub `fetch` only in `src/api/__tests__/`;
+everything above it mocks the API module. A component test that stubs `fetch` is
+asserting on the transport by accident.
 
-## After Making Code Changes
+## After making code changes
 
-After any code change, check if tests need updating due to changed behavior (e.g., different error types, response formats, new error conditions). Then run full verification - see `verification.md`.
+Check whether behaviour changes require test updates — different error types,
+response shapes, new failure modes — then run full verification. See
+`verification.md`.
