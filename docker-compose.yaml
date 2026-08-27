@@ -38,6 +38,24 @@ services:
       - postgres
     restart: unless-stopped
 
+  # Catches every outbound email in development. Nothing leaves the machine; open
+  # the web UI to read what the app sent, including password-reset links.
+  smtp4dev:
+    container_name: smtp4dev_container
+    image: rnwood/smtp4dev:v3
+    environment:
+      # Keep the inbox from growing without bound during long dev sessions.
+      ServerOptions__NumberOfMessagesToKeep: 200
+      ServerOptions__NumberOfSessionsToKeep: 200
+    ports:
+      # Web UI
+      - "${SMTP4DEV_WEB_PORT:-5001}:80"
+      # SMTP, which the backend sends to
+      - "${SMTP_PORT:-2525}:25"
+    networks:
+      - postgres
+    restart: unless-stopped
+
 networks:
   postgres:
     driver: bridge

@@ -35,10 +35,14 @@ src/
 │   └── __tests__/
 │       └── notes.test.ts
 ├── components/
-│   └── AuthForm.tsx     # Shared email/password form for signin + signup
+│   ├── AuthLayout.tsx   # Auth screen shell, FormError, SubmitButton
+│   └── FormField.tsx    # Labelled input + accessible validation message
 ├── lib/
 │   ├── api.ts           # Eden Treaty client singleton + unwrap() helper
 │   ├── auth-client.ts   # Better Auth browser client (+ admin plugin)
+│   ├── auth-schemas.ts  # zod schemas for the auth forms
+│   ├── note-schemas.ts  # zod schema for the note form
+│   ├── form.ts          # applyServerErrors: server errors -> form fields
 │   ├── query-client.ts  # QueryClient singleton
 │   └── logger.ts        # LogLayer browser logger
 ├── test-utils/
@@ -52,6 +56,8 @@ src/
 │   ├── index.tsx        # /
 │   ├── signin.tsx       # /signin
 │   ├── signup.tsx       # /signup
+│   ├── forgot-password.tsx  # /forgot-password
+│   ├── reset-password.tsx   # /reset-password
 │   ├── account.tsx      # /account
 │   ├── admin/users.tsx  # /admin/users — admin-only user table
 │   └── notes.tsx        # /notes     — example protected route
@@ -234,6 +240,18 @@ const { error } = await signIn.email({ email, password });
 if (error) throw new Error(error.message ?? "Could not sign in");
 ```
 
+### Password reset
+
+`/forgot-password` posts to Better Auth, which emails a link. That link hits the
+**backend** first, which validates the token and redirects to `/reset-password?token=…`
+— so the reset route reads the token via `validateSearch` rather than generating it.
+
+The "check your email" screen shows whether or not the address exists, so the form
+cannot be used to discover which addresses are registered.
+
+In development every email is captured by smtp4dev at http://localhost:5001 —
+nothing leaves the machine. See "Email" in `apps/backend/AGENTS.md`.
+
 ### Guarding a route
 
 Use `beforeLoad`, which runs outside React, so ask the client directly rather than
@@ -263,6 +281,61 @@ The auth screens here are plain Tailwind, matching the rest of the template. Bet
 Auth also publishes prebuilt screens through its shadcn registry
 (`bunx shadcn@latest add @better-auth-ui/auth`) — adopt those if you want shadcn/ui;
 its `@better-auth-ui/react` package supplies the hooks behind them.
+
+## Forms
+
+**react-hook-form + zod**, wired with `@hookform/resolvers/zod`.
+
+Server-side request validation stays in Elysia's `t` — it is roughly 18x faster
+under Bun and generates the OpenAPI document, and Elysia does not recommend one
+validator over the other. zod is used **only for client-side form validation**,
+where that performance difference is irrelevant and the ergonomics are better.
+
+### The shape
+
+```typescript
+const { register, handleSubmit, setError, formState: { errors, isSubmitting } } =
+  useForm<CreateNoteValues>({ resolver: zodResolver(createNoteSchema) });
+
+<form noValidate onSubmit={handleSubmit(async (values) => {
+  try {
+    await createNote(values);
+  } catch (cause) {
+    applyServerErrors(setError, cause);
+  }
+})}>
+  <FormField label="Title" error={errors.title} registration={register("title")} />
+  <FormError message={errors.root?.message} />
+</form>
+```
+
+- Schemas live beside the feature: `src/lib/auth-schemas.ts`, `src/lib/note-schemas.ts`.
+- `FormField` renders a labelled input with `aria-invalid` and a `role="alert"`
+  message, so errors are reachable by screen readers and by
+  `findByRole("alert")` in tests.
+- **`noValidate` on every form.** Without it the browser's native validation fires
+  first, showing unstyled messages that differ per engine — and in some engines the
+  submit handler never runs at all, which is exactly how a test caught this.
+
+### The client schema is not the authority
+
+The zod schema mirrors the route's `t` schema for immediate feedback. The server
+revalidates everything, and when the two disagree — a rule that only exists
+server-side, a duplicate email, a race — `applyServerErrors` (`src/lib/form.ts`)
+puts the server's message on the matching field.
+
+It maps the backend's JSON pointers onto form fields (`"/title"` → `title`,
+`"/address/city"` → `address.city`) and falls back to a form-level `root` error for
+anything without a usable pointer, such as a 401. Without that fallback a failed
+submit would appear to do nothing.
+
+Better Auth resolves with `{ error }` rather than throwing, so its failures are set
+on `root` directly rather than passed through `applyServerErrors`.
+
+### Duplicating a rule is acceptable; leaving one out is not
+
+Two definitions of "title is required" is the accepted cost of instant feedback. A
+client rule with no server counterpart is a security bug — the client is skippable.
 
 ## Routing
 

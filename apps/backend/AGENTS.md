@@ -19,6 +19,7 @@ See the root `AGENTS.md` for monorepo-wide commands and build ordering.
 - OpenAPI docs: http://localhost:3080/docs
 - Readiness: http://localhost:3080/health — checks the database. `GET /` is a
   cheaper liveness check that only proves the process is up.
+- Mail (development): http://localhost:5001 — smtp4dev catches every outbound email
 - PGAdmin: http://localhost:5050
 
 ## Commands
@@ -440,6 +441,10 @@ import time; a missing required variable throws on boot.
 | `FRONTEND_URL` | no | `http://localhost:5173` | Origin allowed to send credentialed requests |
 | `SEED_ADMIN_EMAIL` | no | `admin@example.com` | Bootstrap admin created by `db:seed:run` |
 | `SEED_ADMIN_PASSWORD` | no | `changeme12345` | Bootstrap admin password |
+| `SMTP_HOST` | no | `localhost` | SMTP host. smtp4dev in development |
+| `SMTP_PORT` | no | `2525` | SMTP port |
+| `SMTP_USER` / `SMTP_PASS` | no | empty | Omit for smtp4dev; required by real providers |
+| `SMTP_FROM` | no | `no-reply@example.com` | Envelope From on outbound mail |
 
 `NODE_ENV` drives `IS_PROD` and `IS_TEST`. Tests do not read `.env` — the
 Testcontainers global setup injects the database variables before anything reads
@@ -696,6 +701,41 @@ the credentials come from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 It is also the worked example of **doing work outside a request**:
 `getRequestlessContext()` returns the same services a route would get, with a logger
 that has no request attached. Use it for scripts, jobs, and seeds.
+
+## Email
+
+`src/lib/mailer.ts` wraps a nodemailer SMTP transport. Better Auth calls it for the
+two flows it owns:
+
+| Flow | Trigger |
+|------|---------|
+| Verification | Sent on sign-up (`emailVerification.sendOnSignUp`) |
+| Password reset | `POST /api/auth/request-password-reset` |
+
+Better Auth generates the token and the URL; sending is ours. **The reset link
+points at the backend**, which validates the token and redirects to the frontend's
+`/reset-password?token=…`, so the frontend never generates or validates tokens.
+
+### Development
+
+`docker compose up -d` starts **smtp4dev**, which accepts every message and
+delivers none. Read what the app sent at **http://localhost:5001** — including the
+reset link, which is how you complete the flow locally without a real inbox.
+
+Defaults in `.env.example` already point at it. For anything else, set `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`.
+
+### Failures are logged, not thrown
+
+`sendEmail` swallows transport errors after logging them. Better Auth calls it from
+inside its own handlers, and a dead mail server should not turn a password-reset
+request into a 500 — which would also tell an attacker whether the address exists.
+The cost is that a misconfigured `SMTP_HOST` looks like silence; check the logs for
+`Failed to send email`.
+
+Real delivery needs more than this: SPF, DKIM, and a provider that will not have
+transactional mail marked as spam. The transport is deliberately the only part the
+template takes a position on.
 
 ## Logging
 

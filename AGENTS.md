@@ -68,8 +68,9 @@ bun-elysiajs-starter-turbo-monorepo/
 
 - **Runtime / package manager**: Bun (>= 1.4.0). Never npm, pnpm, or yarn.
 - **Backend**: ElysiaJS, Kysely + PostgreSQL, Better Auth, LogLayer, `@elysiajs/openapi` (Scalar UI at `/docs`)
-- **Frontend**: React 19, Vite, TanStack Router, TanStack Query, Tailwind CSS v4
-- **Validation**: Elysia's `t` module (TypeBox), which also generates the OpenAPI schema
+- **Frontend**: React 19, Vite, TanStack Router, TanStack Query, Tailwind CSS v4, react-hook-form + zod
+- **Validation**: Elysia's `t` module (TypeBox) server-side — ~18x faster than zod under Bun and the source of the OpenAPI schema. zod is used only for client-side form validation.
+- **Email**: nodemailer over SMTP; smtp4dev catches everything in development
 - **Auth**: Better Auth — email/password, cookie sessions, admin plugin (roles, ban, impersonate)
 - **Client SDK**: Eden Treaty — type inference, no code generation
 - **Testing**: Vitest, Testcontainers (backend), React Testing Library (frontend)
@@ -91,6 +92,7 @@ Per-package scripts are documented in that package's `AGENTS.md`.
 |---------|-----|
 | API server | http://localhost:3080 |
 | Readiness probe | http://localhost:3080/health |
+| Mail catcher (smtp4dev) | http://localhost:5001 |
 | OpenAPI docs | http://localhost:3080/docs |
 | Frontend | http://localhost:5173 |
 | PGAdmin | http://localhost:5050 |
@@ -153,6 +155,7 @@ Authentication is the exception: Better Auth is infrastructure, not an example.
 | `apps/backend/src/api/notes/**` | Example routes and their tests |
 | `apps/backend/src/schema/note.type.ts` | Example shared schema |
 | `apps/frontend/src/api/notes.ts` and its test | Example API definitions |
+| `apps/frontend/src/lib/note-schemas.ts` | Example form schema |
 | `apps/frontend/src/routes/notes.tsx` | Example page |
 | `apps/frontend/src/routes/index.tsx` | Replace its contents; deleting the file leaves `/` unrouted |
 | `apps/frontend/src/routes/__tests__/-notes.test.tsx` | Example route test |

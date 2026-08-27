@@ -41,6 +41,15 @@ export const BETTER_AUTH_URL = env.get("BETTER_AUTH_URL").default("http://localh
 /** Origin allowed to call the API with credentials. The frontend dev server. */
 export const FRONTEND_URL = env.get("FRONTEND_URL").default("http://localhost:5173").asString();
 
+/** SMTP host. Points at smtp4dev from docker compose in development. */
+export const SMTP_HOST = env.get("SMTP_HOST").default("localhost").asString();
+export const SMTP_PORT = env.get("SMTP_PORT").default("2525").asPortNumber();
+/** Optional SMTP credentials. smtp4dev needs none; a real provider will. */
+export const SMTP_USER = env.get("SMTP_USER").default("").asString();
+export const SMTP_PASS = env.get("SMTP_PASS").default("").asString();
+/** Envelope From address on outbound mail. */
+export const SMTP_FROM = env.get("SMTP_FROM").default("no-reply@example.com").asString();
+
 /** Credentials for the bootstrap admin created by `bun run db:seed:run`. */
 export const SEED_ADMIN_EMAIL = env.get("SEED_ADMIN_EMAIL").default("admin@example.com").asString();
 export const SEED_ADMIN_PASSWORD = env.get("SEED_ADMIN_PASSWORD").default("changeme12345").asString();

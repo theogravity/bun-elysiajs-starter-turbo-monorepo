@@ -2,6 +2,7 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins";
 import { BETTER_AUTH_SECRET, BETTER_AUTH_URL, FRONTEND_URL } from "@/constants.js";
 import { pgPool } from "@/db/index.js";
+import { sendEmail } from "@/lib/mailer.js";
 
 /**
  * Better Auth owns authentication end to end: the `user`, `session`, `account`, and
@@ -27,6 +28,30 @@ export const authOptions = {
 
   emailAndPassword: {
     enabled: true,
+
+    // Better Auth generates the token and the URL; sending is our job. The link
+    // points at the frontend, which posts the token back to /api/auth.
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your password",
+        text: `Someone asked to reset the password for this account.\n\nOpen this link to choose a new one:\n${url}\n\nIf that was not you, ignore this email — nothing has changed.`,
+      });
+    },
+  },
+
+  emailVerification: {
+    // Sends automatically on sign-up rather than waiting for an explicit request.
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Verify your email address",
+        text: `Confirm this address to finish setting up your account:\n${url}`,
+      });
+    },
   },
 
   // Rate limiting is Better Auth's own and is on in production only. Behind a proxy

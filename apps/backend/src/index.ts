@@ -1,5 +1,6 @@
 import { SERVER_PORT } from "@/constants.js";
 import { closeDatabase } from "@/db/index.js";
+import { closeMailer } from "@/lib/mailer.js";
 import { startServer } from "@/server.js";
 import { getLogger } from "@/utils/logger.js";
 
@@ -37,6 +38,7 @@ process.on("uncaughtException", (error) => {
 
     try {
       await app.stop();
+      closeMailer();
       await closeDatabase();
       log.info("Shutdown complete");
       process.exit(0);

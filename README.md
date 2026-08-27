@@ -20,7 +20,8 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - Sample REST tests using Vitest.
 - Sample database migrations and repositories using Kysely.
 - Authentication via [Better Auth](https://www.better-auth.com/): email/password, cookie sessions, and an admin plugin for roles, banning and impersonation.
-- Sign-in, sign-up, account and admin user-management screens on the frontend.
+- Sign-in, sign-up, password reset, account and admin user-management screens, with react-hook-form + zod validation.
+- Email verification and password reset over SMTP, with [smtp4dev](https://github.com/rnwood/smtp4dev) in the Docker stack so nothing leaves your machine in development.
 - Shared error handler package for consistent API error responses.
 - Layered backend architecture (routes -> services -> repositories) documented in `apps/backend/AGENTS.md`.
 - Worked end-to-end example: a `notes` resource spanning migration, repository, service, protected routes, tests, and a React page — example scaffolding, meant to be replaced (see [Using this as a starter](#using-this-as-a-starter)).
@@ -114,6 +115,7 @@ turbo watch dev
 | OpenAPI docs | http://localhost:3080/docs |
 | Frontend | http://localhost:5173 |
 | PGAdmin | http://localhost:5050 |
+| Mail catcher (smtp4dev) | http://localhost:5001 |
 
 ## Testing
 

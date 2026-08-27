@@ -13,7 +13,9 @@ preserve.
 | Password storage | Better Auth's default hashing (scrypt). Not hand-rolled. |
 | Session storage | Rows in `sessions`, revocable, with a cookie the browser sends. |
 | CORS | Restricted to `FRONTEND_URL` with `credentials: true`, because cookie auth cannot use a wildcard origin. |
-| Email verification | **Off.** `emailVerified` is stored but nothing sends mail. Enable it before trusting an address. |
+| Email verification | **On.** Sent on sign-up via SMTP. `autoSignInAfterVerification` is enabled. |
+| Password reset | **On**, token emailed by Better Auth. The "check your email" screen is shown whether or not the address exists, so it cannot be used to enumerate accounts. |
+| Mail transport | nodemailer over SMTP. In development, smtp4dev captures everything locally. Production needs a real provider plus SPF/DKIM. |
 | Rate limiting | Better Auth's own, **on in production only** (60s window, 100 requests). Off in development. Needs proxy configuration to be per-client — see below. |
 | Transport | Plain HTTP locally. No HTTPS enforcement or HSTS. |
 | Secret management | `BETTER_AUTH_SECRET` from `.env`. Fine locally; use a real secret store in production, and never ship the example value. |
@@ -71,7 +73,8 @@ nothing sanitizes it. `trustedProxies` is the alternative when the chain is know
 
 ## Before deploying anywhere shared
 
-Turn on email verification; configure the client-IP header so rate limiting is
+Point `SMTP_*` at a real provider — with smtp4dev's defaults, verification and reset
+mail silently goes nowhere; configure the client-IP header so rate limiting is
 per-client; enforce HTTPS;
 move `BETTER_AUTH_SECRET` into a secret store; restrict CORS to real origins; and
 decide whether impersonation should exist at all.

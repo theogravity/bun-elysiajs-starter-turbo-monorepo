@@ -1,8 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { createNote, noteKeys, notesListQuery } from "@/api/notes";
+import { FormError } from "@/components/AuthLayout";
+import { FormField } from "@/components/FormField";
 import { authClient } from "@/lib/auth-client";
+import { applyServerErrors } from "@/lib/form";
+import { type CreateNoteValues, createNoteSchema } from "@/lib/note-schemas";
 
 export const Route = createFileRoute("/notes")({
   /**
@@ -26,17 +31,13 @@ export const Route = createFileRoute("/notes")({
 function NotesPage() {
   const queryClient = useQueryClient();
   const { data, isPending, error } = useQuery(notesListQuery());
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-
-  const create = useMutation({
-    mutationFn: createNote,
-    onSuccess: async () => {
-      setTitle("");
-      setBody("");
-      await queryClient.invalidateQueries({ queryKey: noteKeys.all });
-    },
-  });
+  const {
+    register,
+    handleSubmit,
+    setError,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateNoteValues>({ resolver: zodResolver(createNoteSchema) });
 
   if (isPending) {
     return <p className="p-8">Loading notes…</p>;
@@ -51,40 +52,46 @@ function NotesPage() {
       <h1 className="mb-4 font-bold text-2xl">Notes ({data.total})</h1>
 
       <form
+        noValidate
         className="mb-8 flex flex-col gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          create.mutate({ title, body });
-        }}
+        onSubmit={handleSubmit(async (values) => {
+          try {
+            await createNote(values);
+            reset();
+            await queryClient.invalidateQueries({ queryKey: noteKeys.all });
+          } catch (cause) {
+            // The zod schema above mirrors the route's `t` schema, but the server
+            // is the authority — this puts its per-field messages back on the
+            // matching inputs when the two disagree.
+            applyServerErrors(setError, cause);
+          }
+        })}
       >
-        <input
-          aria-label="Title"
-          placeholder="Title"
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="rounded border border-gray-300 px-3 py-2"
-        />
-        <textarea
-          aria-label="Body"
-          placeholder="Write something…"
-          required
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          className="rounded border border-gray-300 px-3 py-2"
-        />
+        <FormField label="Title" error={errors.title} registration={register("title")} />
+
+        <label className="flex flex-col gap-1">
+          <span className="font-medium text-sm">Body</span>
+          <textarea
+            aria-invalid={errors.body ? true : undefined}
+            className="rounded border border-gray-300 px-3 py-2 aria-[invalid]:border-red-500"
+            {...register("body")}
+          />
+          {errors.body && (
+            <span role="alert" className="text-red-600 text-sm">
+              {errors.body.message}
+            </span>
+          )}
+        </label>
+
+        <FormError message={errors.root?.message} />
+
         <button
           type="submit"
-          disabled={create.isPending}
+          disabled={isSubmitting}
           className="self-start rounded bg-gray-900 px-3 py-2 font-medium text-white disabled:opacity-50"
         >
-          {create.isPending ? "Saving…" : "Add note"}
+          {isSubmitting ? "Saving…" : "Add note"}
         </button>
-        {create.error && (
-          <p role="alert" className="text-red-600 text-sm">
-            {create.error.message}
-          </p>
-        )}
       </form>
 
       {data.notes.length === 0 ? (
