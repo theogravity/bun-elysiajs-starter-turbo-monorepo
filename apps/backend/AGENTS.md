@@ -567,11 +567,26 @@ in two ways, both deliberate:
 Test code is still type-checked: `bun run verify-types` uses the unrestricted
 `tsconfig.json`.
 
-**`zod` is a direct dependency for the same reason**, even though no source file
-imports it. Better Auth's inferred config type references zod internals, and
-declaration emit can only name them if zod resolves as a normal dependency rather
-than through a hoisted path. Removing it as "unused" breaks `bun run build` with
-`TS2883: The inferred type of 'authOptions' cannot be named`.
+**`zod` is a runtime dependency that no source file imports.** It looks unused and
+is not:
+
+```
+TS2883: The inferred type of 'authOptions' cannot be named without a reference to
+'zod/v4/core'. This is likely not portable. A type annotation is necessary.
+```
+
+Better Auth's inferred config type references zod internals, so emitting a
+declaration for `auth` and `authOptions` means naming them.
+
+**It cannot be a `devDependency`.** TypeScript refuses to emit a declaration that
+names a type from a devDependency, because a consumer of `@internal/backend` is not
+guaranteed to have it installed. Moving it produces the same `TS2883` even with zod
+present in `node_modules` — verified, not assumed.
+
+The alternative is annotating `authOptions` and `auth` explicitly, which would let
+zod go. It is not worth it: annotating `authOptions` as `BetterAuthOptions` erases
+the plugin-specific typing that `auth.$Infer` and the admin client rely on, and
+`auth` has no practical hand-written type.
 
 ## Authentication
 
