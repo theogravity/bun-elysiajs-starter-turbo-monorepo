@@ -39,10 +39,25 @@ src/services/
     └── users.service.test.ts
 ```
 
-Frontend route tests are the exception: they go in `src/routes/__tests__/` and **must be
+Frontend component and route tests mock `@/api/{resource}`; only `src/api/__tests__/`
+stubs `fetch`. Frontend route tests are the exception: they go in `src/routes/__tests__/` and **must be
 prefixed with `-`** (`-users.test.tsx`) so the TanStack Router plugin does not treat them as
 routes. They are still collected and run by Vitest; the prefix only excludes them from
 `routeTree.gen.ts`.
+
+## Testing a Service Directly
+
+A business rule reads better tested against the service than through a route, where
+the assertion becomes about a status code. `getRequestlessContext()` gives you the
+services outside a request:
+
+```typescript
+const { notes } = getRequestlessContext().services;
+
+await expect(notes.getOwnedNote({ userId: otherId, noteId })).resolves.toBeUndefined();
+```
+
+`apps/backend/src/services/__tests__/notes.service.test.ts` is the worked example.
 
 ## Testing API Routes
 

@@ -525,6 +525,10 @@ to the `Services` interface in `src/services/index.ts` **and** instantiate it in
 Put any schema shared with another route or a test in `src/schema/` and add it to
 `apiModels`.
 
+Unless the endpoint is genuinely public, add `.use(authPlugin)` and `auth: true`,
+take the owner from `user.id` rather than from the request, and declare
+`401: "ApiErrorResponse"` in the response map. See [Authentication](#authentication).
+
 **6. Test** — `src/api/widgets/__tests__/{operation}.route.test.ts` driven through
 `testApi`. Migrations are applied automatically by the global setup, so a new
 migration needs no test wiring.
@@ -562,6 +566,12 @@ in two ways, both deliberate:
 
 Test code is still type-checked: `bun run verify-types` uses the unrestricted
 `tsconfig.json`.
+
+**`zod` is a direct dependency for the same reason**, even though no source file
+imports it. Better Auth's inferred config type references zod internals, and
+declaration emit can only name them if zod resolves as a normal dependency rather
+than through a hoisted path. Removing it as "unused" breaks `bun run build` with
+`TS2883: The inferred type of 'authOptions' cannot be named`.
 
 ## Authentication
 

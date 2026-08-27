@@ -49,6 +49,8 @@ Waiting for server to be ready...
 ## Notes
 
 - The server runs on port 3080 by default (`SERVER_PORT` in `apps/backend/.env`)
-- There is no `/health` route; `GET /` returns the string `OK`
+- `GET /` returns `OK` and only proves the process is up, which is what a start
+  check wants. `GET /health` additionally checks the database — use it to tell
+  "server not started" apart from "server up, database down"
 - The server needs Postgres running (`docker compose up -d`) or it will fail on boot
 - Logs are available in the background task output

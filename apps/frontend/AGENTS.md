@@ -34,6 +34,8 @@ src/
 │   ├── notes.ts         # every /notes call, its query keys and query options
 │   └── __tests__/
 │       └── notes.test.ts
+├── components/
+│   └── AuthForm.tsx     # Shared email/password form for signin + signup
 ├── lib/
 │   ├── api.ts           # Eden Treaty client singleton + unwrap() helper
 │   ├── auth-client.ts   # Better Auth browser client (+ admin plugin)
@@ -44,7 +46,8 @@ src/
 │   └── router.tsx       # renderRoute() — renders the real route tree
 ├── routes/
 │   ├── __tests__/
-│   │   └── -notes.test.tsx   # Route test. The `-` prefix is required.
+│   │   ├── -notes.test.tsx   # Route test. The `-` prefix is required.
+│   │   └── -root.test.tsx    # Nav and not-found behaviour
 │   ├── __root.tsx       # Root layout, session-aware nav, devtools
 │   ├── index.tsx        # /
 │   ├── signin.tsx       # /signin

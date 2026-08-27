@@ -32,3 +32,14 @@ matters after a route change. Symptoms that the build is missing or stale:
 The fix is always `turbo build`. Why it fails this way, and why `noImplicitAny`
 makes it loud rather than silent, is explained in `AGENTS.md` under "Build order and
 why it matters".
+
+## Why `verify-types` and `test` declare `dependsOn: ["^build"]`
+
+Without it, a package type-checks against whatever its dependencies last emitted —
+possibly nothing, possibly something stale — **and Turbo caches that pass**. A
+backend route removed in one commit stayed green in the frontend for exactly this
+reason: `verify-types` reported success in 200ms from cache while the code it
+checked no longer compiled.
+
+Do not remove those `dependsOn` entries to speed the pipeline up. A green check that
+ran against stale inputs is worse than a slow one.
