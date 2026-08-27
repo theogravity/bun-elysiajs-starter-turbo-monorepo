@@ -92,19 +92,20 @@ Use TypeScript union types or enums for values with a fixed set of options inste
 **Do this:**
 ```typescript
 // Database-facing enums live next to the table types
-export enum UserProviderType {
-  EMail = "EMail",
+export enum NoteVisibility {
+  Private = "Private",
+  Shared = "Shared",
 }
 
-interface UserProviderInput {
-  providerType: UserProviderType;  // Type-safe, autocomplete-friendly
+interface NoteInput {
+  visibility: NoteVisibility;  // Type-safe, autocomplete-friendly
 }
 ```
 
 **Not this:**
 ```typescript
-interface UserProviderInput {
-  providerType: string;  // Any string accepted, no validation
+interface NoteInput {
+  visibility: string;  // Any string accepted, no validation
 }
 ```
 
@@ -113,12 +114,12 @@ Do **not** use `t.Enum` — it produces poor OpenAPI output and weak client type
 
 ```typescript
 import { t } from "elysia";
-import { UserProviderType } from "@/db/types/user-providers.db-types.js";
+import { NoteVisibility } from "@/db/types/notes.db-types.js";
 
-export const UserProviderTypeSchema = t.String({
-  enum: Object.values(UserProviderType),
-  title: "Auth provider type",
-  description: "The type of the auth provider",
+export const NoteVisibilitySchema = t.String({
+  enum: Object.values(NoteVisibility),
+  title: "Note visibility",
+  description: "Who can see the note",
 });
 ```
 
@@ -130,26 +131,26 @@ enables reuse, and keeps route definitions scannable.
 **Do this:**
 ```typescript
 /** Query parameters for listing users */
-const ListUsersQuerySchema = t.Object({
-  limit: t.Optional(t.Number({ default: 25, description: "Maximum number of users to return" })),
-  offset: t.Optional(t.Number({ default: 0, description: "Number of users to skip" })),
+const ListNotesQuerySchema = t.Object({
+  limit: t.Optional(t.Number({ default: 25, description: "Maximum number of notes to return" })),
+  offset: t.Optional(t.Number({ default: 0, description: "Number of notes to skip" })),
 });
 
 /** Successful response body */
-const ListUsersResponseSchema = t.Object({
-  users: t.Array(UserSchema, { description: "The requested page of users" }),
-  total: t.Number({ description: "Total number of users, ignoring pagination" }),
+const ListNotesResponseSchema = t.Object({
+  notes: t.Array(NoteSchema, { description: "The requested page of notes" }),
+  total: t.Number({ description: "Total number of notes, ignoring pagination" }),
 });
 
-export const listUsersRoute = new Elysia().use(contextPlugin).get("/", handler, {
-  query: ListUsersQuerySchema,
-  response: { 200: ListUsersResponseSchema },
+export const listNotesRoute = new Elysia().use(contextPlugin).get("/", handler, {
+  query: ListNotesQuerySchema,
+  response: { 200: ListNotesResponseSchema },
 });
 ```
 
 **Not this:**
 ```typescript
-export const listUsersRoute = new Elysia().get("/", handler, {
+export const listNotesRoute = new Elysia().get("/", handler, {
   query: t.Object({  // Inline schema — hard to read and impossible to reuse
     limit: t.Optional(t.Number()),
   }),
@@ -187,36 +188,37 @@ types, and the route itself belong together rather than spread across files.
 
 **Do this:**
 ```typescript
-// api/users/get-user.route.ts — everything for this route in one place
+// api/notes/get-note.route.ts — everything for this route in one place
 
-const GetUserParamsSchema = t.Object({
-  userId: t.String({ format: "uuid", description: "ID of the user to fetch" }),
+const GetNoteParamsSchema = t.Object({
+  noteId: t.String({ format: "uuid", description: "ID of the note to fetch" }),
 });
 
-export type GetUserParams = typeof GetUserParamsSchema.static;
+export type GetNoteParams = typeof GetNoteParamsSchema.static;
 
-const GetUserResponseSchema = t.Object({ user: UserSchema });
+const GetNoteResponseSchema = t.Object({ note: NoteSchema });
 
-export type GetUserResponse = typeof GetUserResponseSchema.static;
+export type GetNoteResponse = typeof GetNoteResponseSchema.static;
 
-export const getUserRoute = new Elysia().use(contextPlugin).use(apiModels).get(
-  "/:userId",
+export const getNoteRoute = new Elysia().use(contextPlugin).use(authPlugin).use(apiModels).get(
+  "/:noteId",
   handler,
   {
-    params: GetUserParamsSchema,
-    response: { 200: GetUserResponseSchema, 404: "ApiErrorResponse" },
-    detail: { operationId: "getUser", tags: ["user"], description: "Fetch a single user by ID" },
+    auth: true,
+    params: GetNoteParamsSchema,
+    response: { 200: GetNoteResponseSchema, 401: "ApiErrorResponse", 404: "ApiErrorResponse" },
+    detail: { operationId: "getNote", tags: ["note"], description: "Fetch one of the user's notes" },
   },
 );
 ```
 
 Aggregate in an index file only when something external needs the collection:
 ```typescript
-// api/users/index.ts
-export const userRoutes = new Elysia({ prefix: "/users" })
-  .use(createEMailUserRoute)
-  .use(listUsersRoute)
-  .use(getUserRoute);
+// api/notes/index.ts
+export const noteRoutes = new Elysia({ prefix: "/notes" })
+  .use(listNotesRoute)
+  .use(createNoteRoute)
+  .use(getNoteRoute);
 ```
 
 ## Method Chaining
@@ -268,15 +270,16 @@ All public classes, methods, and functions should have JSDoc comments that descr
 
 ```typescript
 /**
- * Fetches a single user.
+ * Fetches a note the user is allowed to see.
  *
- * Returns `undefined` rather than raising when the user does not exist. Mapping
- * that outcome onto an HTTP status is the route's job.
+ * Returns `undefined` when the note does not exist *or* belongs to someone else.
+ * Mapping that outcome onto an HTTP status is the route's job.
  *
- * @param userId - ID of the user to fetch
- * @returns The user record, or `undefined` if no user has that ID
+ * @param userId - ID of the signed-in user
+ * @param noteId - ID of the note to fetch
+ * @returns The note, or `undefined` if it is missing or not theirs
  */
-async getUserById({ userId }: { userId: string }): Promise<UserDb | undefined> {
+async getOwnedNote({ userId, noteId }: { userId: string; noteId: string }): Promise<NoteDb | undefined> {
   // ...
 }
 ```
@@ -305,13 +308,13 @@ All interface properties should have JSDoc comments explaining their purpose. Th
 
 ```typescript
 /**
- * Database table schema for users.
+ * Database table schema for notes.
  */
-export interface UsersTable {
+export interface NotesTable {
   /** Unique identifier (UUID v4) */
   id: Generated<string>;
-  /** The user's first name */
-  givenName: string;
+  /** Owner. References Better Auth's `users.id`, a text id rather than a uuid. */
+  userId: string;
   /** Set by the database on insert */
   createdAt: GeneratedAlways<Date>;
 }

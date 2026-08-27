@@ -67,9 +67,10 @@ bun-elysiajs-starter-turbo-monorepo/
 ### Technology stack
 
 - **Runtime / package manager**: Bun (>= 1.4.0). Never npm, pnpm, or yarn.
-- **Backend**: ElysiaJS, Kysely + PostgreSQL, LogLayer, `@elysiajs/openapi` (Scalar UI at `/docs`)
+- **Backend**: ElysiaJS, Kysely + PostgreSQL, Better Auth, LogLayer, `@elysiajs/openapi` (Scalar UI at `/docs`)
 - **Frontend**: React 19, Vite, TanStack Router, TanStack Query, Tailwind CSS v4
 - **Validation**: Elysia's `t` module (TypeBox), which also generates the OpenAPI schema
+- **Auth**: Better Auth — email/password, cookie sessions, admin plugin (roles, ban, impersonate)
 - **Client SDK**: Eden Treaty — type inference, no code generation
 - **Testing**: Vitest, Testcontainers (backend), React Testing Library (frontend)
 - **Tooling**: Turborepo, Biome, syncpack, lefthook, commitlint
@@ -103,6 +104,12 @@ docker compose up -d          # Postgres + PGAdmin
 bun run db:migrate:latest
 ```
 
+Set a real `BETTER_AUTH_SECRET` in `apps/backend/.env` before doing anything beyond
+local development — `openssl rand -base64 32`. To make yourself an admin, sign up
+through the UI and then run
+`update users set role = 'admin' where email = 'you@example.com';`, since the admin
+endpoints require an existing admin.
+
 Docker is required for local Postgres and for the backend test suite.
 
 ### Cleaning
@@ -115,31 +122,38 @@ bun run clean:dist         # dist directories only
 
 ## Example scaffolding vs. project infrastructure
 
-This is a **starter template**. The `users` resource is illustrative scaffolding: it
-exists to show the layering working end to end, not because the project is about
-users. Anyone building on this repo should replace it with their actual domain.
+This is a **starter template**. The `notes` resource is illustrative scaffolding: it
+exists to show the layering working end to end and how application data hangs off an
+authenticated user, not because the project is about notes. Replace it with the real
+domain.
 
 **If you are an agent asked to build a feature: model what was actually asked for.**
-Follow the *patterns* the `users` resource demonstrates — do not extend, preserve, or
-imitate the users domain itself unless the request is genuinely about users. Treat
-`users` files as deletable, and do not assume any table, route, or type below exists
-in the finished product.
+Follow the *patterns* `notes` demonstrates — do not extend, preserve, or imitate the
+notes domain itself unless the request is genuinely about notes. Treat those files as
+deletable, and do not assume any table, route, or type below exists in the finished
+product.
+
+Authentication is the exception: Better Auth is infrastructure, not an example.
 
 ### Scaffolding — replace or delete
 
 | Path | What it is |
 |------|------------|
-| `apps/backend/src/db/migrations/0001-init.ts` | The `users` / `user_providers` tables and their enum types |
-| `apps/backend/src/db/types/users.db-types.ts`, `user-providers.db-types.ts` | Example table types |
-| `apps/backend/src/db/repositories/users.repository.ts`, `user-providers.repository.ts` | Example repositories |
-| `apps/backend/src/services/users.service.ts` | Example service |
-| `apps/backend/src/api/users/**` | Example routes and their tests |
-| `apps/backend/src/schema/user.type.ts`, `user-provider.type.ts`, `enums.type.ts` | Example shared schemas |
-| `apps/frontend/src/api/users.ts` and its test | Example API definitions for the `users` resource |
-| `apps/frontend/src/routes/users.tsx` | Example page |
-| `apps/frontend/src/routes/index.tsx` | Example page — replace its contents; deleting the file leaves `/` unrouted |
-| `apps/frontend/src/routes/__tests__/-users.test.tsx` | Example route test |
-| The `<Link>` entries in `apps/frontend/src/routes/__root.tsx` | Nav pointing at the example pages |
+| `apps/backend/src/db/migrations/0002-notes.ts` | The `notes` table |
+| `apps/backend/src/db/types/notes.db-types.ts` | Example table types |
+| `apps/backend/src/db/repositories/notes.repository.ts` | Example repository |
+| `apps/backend/src/services/notes.service.ts` | Example service, including the ownership rule |
+| `apps/backend/src/api/notes/**` | Example routes and their tests |
+| `apps/backend/src/schema/note.type.ts` | Example shared schema |
+| `apps/frontend/src/api/notes.ts` and its test | Example API definitions |
+| `apps/frontend/src/routes/notes.tsx` | Example page |
+| `apps/frontend/src/routes/index.tsx` | Replace its contents; deleting the file leaves `/` unrouted |
+| `apps/frontend/src/routes/__tests__/-notes.test.tsx` | Example route test |
+| The `notes` `<Link>` in `apps/frontend/src/routes/__root.tsx` | Nav pointing at the example page |
+
+**Authentication is not scaffolding.** Better Auth, its migration
+(`0001-better-auth.ts`), `src/lib/auth.ts`, `src/plugins/auth.plugin.ts`, the auth
+screens, and `src/lib/auth-client.ts` are the template. Keep them.
 
 Deleting a scaffolding file means also removing its registration — the `Database`,
 `Repositories`, and `Services` interfaces, the constructor calls in `ApiContext`, the
@@ -158,11 +172,8 @@ and `BaseService`; `src/db/index.ts` (the `CamelCasePlugin` registration); the
 Testcontainers setup in `apps/backend/src/test-utils/`; the frontend's
 `src/lib/api.ts` client, its `src/test-utils/` helpers, and `unwrap()`; and all three `packages/`.
 
-**One coupled piece to watch:** `testFramework.generateTestFacets()` and
-`generateNewUsers()` (`apps/backend/src/test-utils/test-framework/`) create *users* and
-return headers that mock authentication. The Testcontainers plumbing around them is
-infrastructure, but these two methods assume the example schema — adapt them rather
-than deleting them when the `users` table goes.
+`testFramework.generateTestFacets()` signs a real user up through Better Auth and
+returns the session cookie, so it stays useful whatever domain replaces `notes`.
 
 ## Backend architecture in one screen
 
@@ -175,6 +186,9 @@ route (src/api/**) -> service (src/services/**) -> repository (src/db/repositori
 **Routes call services; services call repositories. Routes never call repositories
 directly.** `ApiContext` exposes only `log` and `services`, so a route handler has
 no path to a repository — needing one means a service method is missing.
+
+Authentication is Better Auth, mounted at `/api/auth/*` and deliberately outside this
+chain — see "Authentication" in `apps/backend/AGENTS.md`.
 
 Services return domain outcomes; routes map them onto HTTP with
 `return status(404, apiErrorBody({ ... }))`. Failures are **returned, not thrown** —

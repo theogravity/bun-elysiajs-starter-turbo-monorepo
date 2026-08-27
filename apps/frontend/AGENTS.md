@@ -5,9 +5,10 @@ React 19 + Vite + TanStack Router + TanStack Query + Tailwind CSS v4.
 See the root `AGENTS.md` for monorepo-wide commands and `apps/backend/AGENTS.md`
 for the API this talks to.
 
-> **The pages here are example scaffolding.** `index.tsx` ("Hello, World!"),
-> `users.tsx`, its test, and the nav links in `__root.tsx` demonstrate the wiring —
-> they are not the app. Replace them with real screens. The plumbing they rely on
+> **The `notes` pages are example scaffolding.** `index.tsx`, `notes.tsx`, its test,
+> and the related nav links demonstrate the wiring — they are not the app. Replace
+> them with real screens. The auth screens (`signin`, `signup`, `account`,
+> `admin/users`) and `src/lib/auth-client.ts` are infrastructure worth keeping. The plumbing they rely on
 > (`src/lib/api.ts`, the router context in `main.tsx`, `test-setup.ts`) is
 > infrastructure worth keeping. See
 > [Example scaffolding vs. project infrastructure](../../AGENTS.md).
@@ -30,11 +31,12 @@ calls to succeed.
 ```
 src/
 ├── api/
-│   ├── users.ts         # every /users call, its query keys and query options
+│   ├── notes.ts         # every /notes call, its query keys and query options
 │   └── __tests__/
-│       └── users.test.ts
+│       └── notes.test.ts
 ├── lib/
 │   ├── api.ts           # Eden Treaty client singleton + unwrap() helper
+│   ├── auth-client.ts   # Better Auth browser client (+ admin plugin)
 │   ├── query-client.ts  # QueryClient singleton
 │   └── logger.ts        # LogLayer browser logger
 ├── test-utils/
@@ -42,10 +44,14 @@ src/
 │   └── router.tsx       # renderRoute() — renders the real route tree
 ├── routes/
 │   ├── __tests__/
-│   │   └── -users.test.tsx   # Route test. The `-` prefix is required.
-│   ├── __root.tsx       # Root layout, nav, devtools
-│   ├── index.tsx        # /          — example page
-│   └── users.tsx        # /users     — example data-fetching route
+│   │   └── -notes.test.tsx   # Route test. The `-` prefix is required.
+│   ├── __root.tsx       # Root layout, session-aware nav, devtools
+│   ├── index.tsx        # /
+│   ├── signin.tsx       # /signin
+│   ├── signup.tsx       # /signup
+│   ├── account.tsx      # /account
+│   ├── admin/users.tsx  # /admin/users — admin-only user table
+│   └── notes.tsx        # /notes     — example protected route
 ├── routeTree.gen.ts     # Auto-generated. Never edit.
 ├── main.tsx             # Router + QueryClientProvider composition
 ├── test-setup.ts        # Registers jest-dom matchers with Vitest
@@ -103,20 +109,20 @@ One file per backend resource, mirroring `apps/backend/src/api/{resource}/`.
 That module owns three things for its resource:
 
 ```typescript
-// src/api/users.ts
-export function listUsers(params: ListUsersParams = {}) {   // 1. the call
-  return unwrap(api.users.get({ query: withDefaults(params) }));
+// src/api/notes.ts
+export function listNotes(params: ListUsersParams = {}) {   // 1. the call
+  return unwrap(api.notes.get({ query: withDefaults(params), fetch: { credentials: "include" } }));
 }
 
-export const userKeys = {                                    // 2. the query keys
-  all: ["users"] as const,
-  list: (params) => [...userKeys.all, "list", params] as const,
-  detail: (userId: string) => [...userKeys.all, "detail", userId] as const,
+export const noteKeys = {                                    // 2. the query keys
+  all: ["notes"] as const,
+  list: (params) => [...noteKeys.all, "list", params] as const,
+  detail: (userId: string) => [...noteKeys.all, "detail", userId] as const,
 };
 
-export function usersListQuery(params: ListUsersParams = {}) {  // 3. query options
+export function notesListQuery(params: ListUsersParams = {}) {  // 3. query options
   const resolved = withDefaults(params);
-  return queryOptions({ queryKey: userKeys.list(resolved), queryFn: () => listUsers(resolved) });
+  return queryOptions({ queryKey: noteKeys.list(resolved), queryFn: () => listNotes(resolved) });
 }
 ```
 
@@ -125,9 +131,9 @@ Why it is worth the indirection:
 - **An endpoint change is a one-file change.** A renamed path or a new query
   parameter is edited here, not hunted for across routes and components.
 - **The key and the fetcher cannot drift.** They are built from the same
-  normalized params in the same function, so `usersListQuery()` and
-  `usersListQuery({ offset: 0 })` produce one cache entry rather than two.
-- **Keys nest under a common prefix**, so `queryClient.invalidateQueries({ queryKey: userKeys.all })`
+  normalized params in the same function, so `notesListQuery()` and
+  `notesListQuery({ offset: 0 })` produce one cache entry rather than two.
+- **Keys nest under a common prefix**, so `queryClient.invalidateQueries({ queryKey: noteKeys.all })`
   invalidates every query for the resource without a component knowing how keys
   are shaped.
 - **Tests get simpler.** Components mock the module; only the api module itself
@@ -137,16 +143,16 @@ Why it is worth the indirection:
 
 ```typescript
 import { useQuery } from "@tanstack/react-query";
-import { usersListQuery } from "@/api/users";
+import { notesListQuery } from "@/api/notes";
 
 // In a route loader — prefetch so the component renders warm
-loader: ({ context }) => context.queryClient.ensureQueryData(usersListQuery()),
+loader: ({ context }) => context.queryClient.ensureQueryData(notesListQuery()),
 
 // In the component — same definition, so the same cache entry
-const { data, isPending, error } = useQuery(usersListQuery());
+const { data, isPending, error } = useQuery(notesListQuery());
 ```
 
-`src/api/users.ts` and `src/routes/users.tsx` are a complete worked example.
+`src/api/notes.ts` and `src/routes/notes.tsx` are a complete worked example.
 
 ### Adding an endpoint
 
@@ -154,7 +160,7 @@ const { data, isPending, error } = useQuery(usersListQuery());
    `unwrap()`. Create the file if the resource is new.
 2. Add a key to that resource's `*Keys` object, and a `queryOptions` factory if it
    is a query.
-3. Derive response types from the function — `Awaited<ReturnType<typeof listUsers>>`
+3. Derive response types from the function — `Awaited<ReturnType<typeof listNotes>>`
    — rather than restating the shape. It then tracks the backend automatically.
 4. Cover the request in `src/api/__tests__/{resource}.test.ts`: assert the method,
    the path, and the parameters.
@@ -163,9 +169,9 @@ Call shapes on the underlying client mirror the route tree, and path parameters 
 expressed by **calling** a segment:
 
 ```typescript
-api.users.get({ query: { limit: 25, offset: 0 } })   // GET  /users
-api.users({ userId }).get()                          // GET  /users/:userId
-api.users.email.post({ givenName, familyName, email, password })  // POST /users/email
+api.notes.get({ query: { limit: 25, offset: 0 } })   // GET  /notes
+api.notes({ noteId }).get()                          // GET  /notes/:noteId
+api.notes.post({ title, body })                      // POST /notes
 ```
 
 ### Mutations
@@ -174,11 +180,11 @@ The mutation function comes from the api module too, and invalidation uses the k
 factory rather than a literal:
 
 ```typescript
-import { createEMailUser, userKeys } from "@/api/users";
+import { createNote, noteKeys } from "@/api/notes";
 
 const mutation = useMutation({
-  mutationFn: createEMailUser,
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),
+  mutationFn: createNote,
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: noteKeys.all }),
 });
 ```
 
@@ -206,6 +212,55 @@ Logging is disabled when `import.meta.env.MODE === "test"`, mirroring the backen
 so test output stays readable. Call `logger.enableLogging()` inside a test that needs
 to see it.
 
+## Authentication
+
+`src/lib/auth-client.ts` is the Better Auth browser client. Sessions are cookies, so
+it is configured with `credentials: "include"` and the backend allows exactly this
+origin — cookie auth cannot use a wildcard CORS origin.
+
+```typescript
+import { signIn, signUp, signOut, useSession, authClient } from "@/lib/auth-client";
+
+const { data, isPending } = useSession();   // data is null when signed out
+```
+
+Better Auth returns `{ data, error }` rather than throwing, the same shape as Eden:
+
+```typescript
+const { error } = await signIn.email({ email, password });
+if (error) throw new Error(error.message ?? "Could not sign in");
+```
+
+### Guarding a route
+
+Use `beforeLoad`, which runs outside React, so ask the client directly rather than
+using the `useSession` hook:
+
+```typescript
+export const Route = createFileRoute("/notes")({
+  beforeLoad: async () => {
+    const { data } = await authClient.getSession();
+    if (!data) throw redirect({ to: "/signin" });
+  },
+});
+```
+
+**This is convenience, not security.** The backend returns 401 regardless of what
+the client does. `admin/users.tsx` shows the same pattern with a role check.
+
+### Admin
+
+`adminClient()` mirrors the server plugin and adds `authClient.admin.*` —
+`listUsers`, `setRole`, `banUser`, `unbanUser`, `impersonateUser`. `/admin/users`
+uses them with TanStack Query. Every call is authorized again on the server.
+
+### Prebuilt screens
+
+The auth screens here are plain Tailwind, matching the rest of the template. Better
+Auth also publishes prebuilt screens through its shadcn registry
+(`bunx shadcn@latest add @better-auth-ui/auth`) — adopt those if you want shadcn/ui;
+its `@better-auth-ui/react` package supplies the hooks behind them.
+
 ## Routing
 
 Routes are file-based; `@tanstack/router-plugin` regenerates `routeTree.gen.ts` on
@@ -215,8 +270,8 @@ regenerated** — run `bun run dev` or `bun run build` after adding one.
 | File | URL |
 |------|-----|
 | `src/routes/index.tsx` | `/` |
-| `src/routes/users.tsx` | `/users` |
-| `src/routes/users/$userId.tsx` | `/users/:userId` |
+| `src/routes/notes.tsx` | `/notes` |
+| `src/routes/admin/users.tsx` | `/admin/users` |
 
 ### Router context
 
@@ -225,15 +280,15 @@ declares that shape via `createRootRouteWithContext<RouterContext>()`. That is w
 makes `context.queryClient` available in loaders:
 
 ```typescript
-export const Route = createFileRoute("/users")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery(0)),
+export const Route = createFileRoute("/notes")({
+  loader: ({ context }) => context.queryClient.ensureQueryData(notesListQuery()),
   component: UsersPage,
 });
 ```
 
 Prefetching in the loader is optional but means the component renders with data
 already warm. Define the query options in one function shared by the loader and
-the component so the key and fetcher cannot drift apart — `src/routes/users.tsx`
+the component so the key and fetcher cannot drift apart — `src/routes/notes.tsx`
 shows the pattern.
 
 ### Navigation
@@ -241,11 +296,11 @@ shows the pattern.
 ```typescript
 import { Link, useNavigate } from "@tanstack/react-router";
 
-<Link to="/users">Users</Link>
-<Link to="/users/$userId" params={{ userId }}>Detail</Link>
+<Link to="/notes">Notes</Link>
+<Link to="/admin/users">Users</Link>
 
 const navigate = useNavigate();
-navigate({ to: "/users" });
+navigate({ to: "/notes" });
 ```
 
 `to` is typed against the generated route tree, so an unknown path is a type
@@ -263,11 +318,11 @@ and using it makes every test file fail to load with `expect is not defined`. Th
 
 Component tests live alongside the component as `Component.test.tsx`. Route tests
 go in `src/routes/__tests__/` and **must be prefixed with `-`**
-(`-users.test.tsx`) so the router plugin does not treat them as routes. A
+(`-notes.test.tsx`) so the router plugin does not treat them as routes. A
 `-`-prefixed file is still collected and run by Vitest; it is only excluded from
 `routeTree.gen.ts`.
 
-`src/routes/__tests__/-users.test.tsx` is a working example of the whole pattern.
+`src/routes/__tests__/-notes.test.tsx` is a working example of the whole pattern.
 
 ```typescript
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -300,12 +355,12 @@ test:
 ```typescript
 import { stubFetch } from "@/test-utils/fetch";
 
-const captured = stubFetch({ users: [], total: 0 });
+const captured = stubFetch({ notes: [], total: 0 });
 
-await listUsers();
+await listNotes();
 
 expect(captured[0]?.method).toBe("GET");
-expect(captured[0]?.url.pathname).toBe("/users");
+expect(captured[0]?.url.pathname).toBe("/notes");
 expect(captured[0]?.url.searchParams.get("limit")).toBe("25");
 ```
 
@@ -324,19 +379,19 @@ request is made:
 ```typescript
 import { renderRoute } from "@/test-utils/router";
 
-vi.mock("@/api/users", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/users")>()),
-  usersListQuery: vi.fn(),
+vi.mock("@/api/notes", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/notes")>()),
+  notesListQuery: vi.fn(),
 }));
 
-vi.mocked(usersListQuery).mockReturnValue(
+vi.mocked(notesListQuery).mockReturnValue(
   queryOptions({
-    queryKey: userKeys.list({ limit: USERS_PAGE_SIZE, offset: 0 }),
-    queryFn: async () => ({ users: [], total: 0 }),
+    queryKey: noteKeys.list({ limit: NOTES_PAGE_SIZE, offset: 0 }),
+    queryFn: async () => ({ notes: [], total: 0 }),
   }),
 );
 
-renderRoute("/users");
+renderRoute("/notes");
 ```
 
 `renderRoute` builds the real route tree with the same wiring as `main.tsx` —
@@ -348,8 +403,8 @@ test needs to seed or inspect the cache.
 Build the mocked key with the real key factory. A hand-written key needs a cast to
 typecheck, and the cast is exactly what would hide a drifted key.
 
-Note that partially mocking a module only replaces its **exports**. `usersListQuery`
-calls `listUsers` through a module-local binding, so mocking `listUsers` alone would
+Note that partially mocking a module only replaces its **exports**. `notesListQuery`
+calls `listNotes` through a module-local binding, so mocking `listNotes` alone would
 not affect it — mock the function the component actually imports.
 
 ## Constraints

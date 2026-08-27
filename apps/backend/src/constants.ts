@@ -34,6 +34,13 @@ export const DB_NAME = required("DB_NAME");
 export const DB_USER = required("DB_USER");
 export const DB_PASS = required("DB_PASS");
 
+/** Signs session cookies. Generate with `openssl rand -base64 32`. */
+export const BETTER_AUTH_SECRET = required("BETTER_AUTH_SECRET");
+/** Public origin of this API, used to build auth callback URLs. */
+export const BETTER_AUTH_URL = env.get("BETTER_AUTH_URL").default("http://localhost:3080").asString();
+/** Origin allowed to call the API with credentials. The frontend dev server. */
+export const FRONTEND_URL = env.get("FRONTEND_URL").default("http://localhost:5173").asString();
+
 export const IS_PROD = process.env.NODE_ENV === "production";
 export const IS_TEST = process.env.NODE_ENV === "test";
 export const BACKEND_LOG_LEVEL = env.get("BACKEND_LOG_LEVEL").default("debug").asString();

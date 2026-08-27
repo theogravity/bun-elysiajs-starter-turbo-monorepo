@@ -10,6 +10,11 @@ global.dbPool = null;
 
 export async function setup(_config: any) {
   console.log("Setting up global environment");
+
+  // Better Auth requires a secret at import time. Tests do not read `.env` — and CI
+  // has none — so inject a throwaway one, the same way the database variables below
+  // are injected from the container.
+  process.env.BETTER_AUTH_SECRET ??= "test-secret-not-used-outside-tests-000000";
   const postgresContainer = initializePostgres();
 
   const startedContainers = await Promise.all([postgresContainer]);

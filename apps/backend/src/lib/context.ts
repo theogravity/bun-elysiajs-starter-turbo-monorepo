@@ -1,11 +1,10 @@
 import type { Kysely } from "kysely";
 import type { ILogLayer } from "loglayer";
 import { db } from "@/db/index.js";
-import { UserProvidersRepository } from "@/db/repositories/user-providers.repository.js";
-import { UsersRepository } from "@/db/repositories/users.repository.js";
+import { NotesRepository } from "@/db/repositories/notes.repository.js";
 import type { Database } from "@/db/types/index.js";
 import type { Services } from "@/services/index.js";
-import { UsersService } from "@/services/users.service.js";
+import { NotesService } from "@/services/notes.service.js";
 import { getLogger } from "@/utils/logger.js";
 
 export type ApiContextParams = {
@@ -32,13 +31,12 @@ export class ApiContext {
       log: params.log,
       db: params.db,
       repos: {
-        users: new UsersRepository(params),
-        userProviders: new UserProvidersRepository(params),
+        notes: new NotesRepository(params),
       },
     };
 
     this.services = {
-      users: new UsersService(serviceParams),
+      notes: new NotesService(serviceParams),
     };
 
     for (const service of Object.values(this.services)) {

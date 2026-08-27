@@ -1,5 +1,5 @@
-import type { UsersService } from "@/services/users.service.js";
+import type { NotesService } from "@/services/notes.service.js";
 
 export interface Services {
-  users: UsersService;
+  notes: NotesService;
 }

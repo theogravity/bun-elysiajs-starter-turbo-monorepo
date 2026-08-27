@@ -4,11 +4,12 @@ Backend-specific documentation for the ElysiaJS API server.
 
 See the root `AGENTS.md` for monorepo-wide commands and build ordering.
 
-> **The `users` resource is example scaffolding, not the domain.** It exists to show
-> the layering end to end. Every `users` / `user_providers` file — migration, table
-> types, repositories, service, routes, schemas, tests — is meant to be replaced with
-> the real domain. Follow its patterns; do not extend it unless the task is actually
-> about users. See
+> **The `notes` resource is example scaffolding, not the domain.** It exists to show
+> the layering end to end and how application data hangs off an authenticated user.
+> Every `notes` file — migration, table types, repository, service, routes, tests —
+> is meant to be replaced. Follow its patterns; do not extend it unless the task is
+> actually about notes. Authentication is *not* scaffolding: Better Auth and its
+> migration stay. See
 > [Example scaffolding vs. project infrastructure](../../AGENTS.md) for the full list
 > and what to keep.
 
@@ -64,21 +65,24 @@ no extensions there.
 `src/db/index.ts` registers Kysely's `CamelCasePlugin`. It translates in both
 directions at query time, so:
 
-- **Migrations** declare snake_case columns: `given_name`, `created_at`
-- **Table interfaces and query builders** use camelCase: `givenName`, `createdAt`
+- **Migrations** declare snake_case columns: `user_id`, `created_at`
+- **Table interfaces and query builders** use camelCase: `userId`, `createdAt`
 
 ```typescript
 // migration
-.addColumn("given_name", "varchar(50)", (col) => col.notNull())
+.addColumn("user_id", "text", (col) => col.notNull())
 
-// src/db/types/users.db-types.ts
-export interface UsersTable {
-  givenName: string;
+// src/db/types/notes.db-types.ts
+export interface NotesTable {
+  userId: string;
 }
 
 // repository — camelCase here too, the plugin rewrites it
-db.selectFrom("users").orderBy("createdAt", "desc")
+db.selectFrom("notes").where("userId", "=", userId).orderBy("createdAt", "desc")
 ```
+
+This applies to Better Auth's tables too: `src/lib/auth.ts` maps its fields to
+snake_case so they behave the same way. See [Authentication](#authentication).
 
 Getting this backwards fails at runtime, not at compile time. There is no type
 error for a column name that does not exist in the database.
@@ -167,31 +171,42 @@ Services own the business logic and the transaction boundary. They extend
 `BaseService`, which provides `log`, `db`, `repos`, and `services`.
 
 ```typescript
-export class UsersService extends BaseService {
-  async createEMailUser({ user, email, password }: { user: NewUser; email: string; password: string }): Promise<UserDb> {
-    const pass = await bcrypt.hash(password, 12);
+export class NotesService extends BaseService {
+  /**
+   * Ownership lives here, not in the route: it is a business rule, so every caller
+   * gets it. Returning `undefined` for "not yours" as well as "no such note" avoids
+   * telling a caller that someone else's note exists.
+   */
+  async getOwnedNote({ userId, noteId }: { userId: string; noteId: string }): Promise<NoteDb | undefined> {
+    const note = await this.repos.notes.getNoteById({ db: this.db, noteId });
 
-    // `execute()` resolves to whatever the callback returns. Assigning to an outer
-    // `let` instead would type the result as `UserDb | undefined`, since the
-    // compiler cannot prove the callback ran.
-    return this.db.transaction().execute(async (db) => {
-      const created = await this.repos.users.createUser({ db, user });
+    if (!note || note.userId !== userId) {
+      return undefined;
+    }
 
-      await this.repos.userProviders.createUserProvider({
-        db,
-        userProvider: { providerType: UserProviderType.EMail, userId: created.id, passwordHash: pass },
-      });
-
-      return created;
-    });
+    return note;
   }
 }
 ```
 
-This is the layering in miniature: hashing the password is business logic, writing
-to two tables atomically is orchestration, and the `db` handle from
-`this.db.transaction()` is threaded into each repository call so both writes share
-one transaction.
+When several writes must be atomic, open a transaction and thread the `db` handle
+into each repository call:
+
+```typescript
+// `execute()` resolves to whatever the callback returns. Assigning to an outer
+// `let` instead would type the result as `T | undefined`, since the compiler
+// cannot prove the callback ran.
+const note = await this.db.transaction().execute(async (db) => {
+  const created = await this.repos.notes.createNote({ db, note });
+  await this.repos.auditLog.record({ db, event: "note.created", noteId: created.id });
+
+  return created;
+});
+```
+
+That is the layering in miniature: deciding what a user may see is business logic,
+writing to two tables atomically is orchestration, and the `db` handle threads
+through so both writes share one transaction.
 
 Services may call sibling services through `this.services`. That property is
 populated after construction by `withServices()` in `ApiContext`, which is what
@@ -209,34 +224,37 @@ Routes are Elysia instances that validate input, call exactly one service entry
 point, and map the result onto the declared response schema.
 
 ```typescript
-export const getUserRoute = new Elysia().use(contextPlugin).use(apiModels).get(
-  "/:userId",
-  async ({ params, ctx, log, status }) => {
-    log?.info(`Fetching user: ${params.userId}`);
+export const getNoteRoute = new Elysia().use(contextPlugin).use(authPlugin).use(apiModels).get(
+  "/:noteId",
+  async ({ params, ctx, user, log, status }) => {
+    log?.withMetadata({ userId: user.id, noteId: params.noteId }).info("Fetching note");
 
-    const user = await ctx.services.users.getUserById({ userId: params.userId });
+    // The user id comes from the session, never from the request.
+    const note = await ctx.services.notes.getOwnedNote({ userId: user.id, noteId: params.noteId });
 
     // Return the failure; do not throw it. See Error handling below.
-    if (!user) {
+    if (!note) {
       return status(404, apiErrorBody({ code: BackendErrorCodes.NOT_FOUND_ERROR }));
     }
 
-    const response: GetUserResponse = {
-      user: { id: user.id, givenName: user.givenName, familyName: user.familyName },
+    const response: GetNoteResponse = {
+      note: { id: note.id, title: note.title, body: note.body, createdAt: note.createdAt.toISOString() },
     };
 
     return response;
   },
   {
-    params: GetUserParamsSchema,
+    auth: true,
+    params: GetNoteParamsSchema,
     response: {
-      200: GetUserResponseSchema,
+      200: GetNoteResponseSchema,
+      401: "ApiErrorResponse",
       404: "ApiErrorResponse",
     },
     detail: {
-      operationId: "getUser",
-      tags: ["user"],
-      description: "Fetch a single user by ID",
+      operationId: "getNote",
+      tags: ["note"],
+      description: "Fetch one of the signed-in user's notes",
     },
   },
 );
@@ -412,6 +430,9 @@ import time; a missing required variable throws on boot.
 | `DB_PORT` | no | `5432` | Postgres port |
 | `SERVER_PORT` | no | `3080` | Port the API listens on |
 | `BACKEND_LOG_LEVEL` | no | `debug` | LogLayer level |
+| `BETTER_AUTH_SECRET` | yes | — | Signs session cookies. `openssl rand -base64 32` |
+| `BETTER_AUTH_URL` | no | `http://localhost:3080` | Public origin of this API |
+| `FRONTEND_URL` | no | `http://localhost:5173` | Origin allowed to send credentialed requests |
 
 `NODE_ENV` drives `IS_PROD` and `IS_TEST`. Tests do not read `.env` — the
 Testcontainers global setup injects the database variables before anything reads
@@ -435,10 +456,10 @@ deployment fails at boot instead of on the first request.
 There is no code generator — create the files directly, working from the database
 outward. Each step names the registration you must not forget.
 
-`src/api/users/` is a complete worked example: a POST, a paginated list, and a
-fetch-by-id with a 404. Read it for the shape, then write your own resource. It is
-example scaffolding, so replacing it is expected; adding `widgets` alongside it is
-not a goal in itself.
+`src/api/notes/` is a complete worked example: a POST, a paginated list, and a
+fetch-by-id with a 404, all behind a session. Read it for the shape, then write your own resource. It is
+example scaffolding, so replacing it is expected; adding another resource alongside
+it is not a goal in itself.
 
 **1. Migration** — `bun run db:migrate:create <name>` writes
 `src/db/migrations/{unixMillis}_{name}.ts`. It needs `.env` to exist even though it
@@ -535,6 +556,90 @@ in two ways, both deliberate:
 Test code is still type-checked: `bun run verify-types` uses the unrestricted
 `tsconfig.json`.
 
+## Authentication
+
+**Better Auth owns authentication**: the `users`, `sessions`, `accounts`, and
+`verifications` tables, password hashing, cookie sessions, and every route under
+`/api/auth/*`. It is configured in `src/lib/auth.ts` and mounted directly in
+`src/server.ts`.
+
+### It sits outside the layering, deliberately
+
+`auth.handler` is mounted on the Elysia app and talks to Postgres through its own
+adapter. Do not write repositories for its tables or call them from a service —
+go through `auth.api.*`, which keeps hashing, session invalidation, and plugin
+hooks consistent.
+
+Reading is different: `users` **is** declared in the `Database` interface so
+application queries can join against it (`src/db/types/auth.db-types.ts`). Treat it
+as read-only.
+
+### Columns are snake_case on purpose
+
+Better Auth defaults to quoted camelCase columns and a table literally named
+`"user"`. `src/lib/auth.ts` maps every model and field to plural snake_case so its
+tables match the rest of the schema and translate correctly through the
+`CamelCasePlugin`. Without that mapping, `db.selectFrom("users").select("emailVerified")`
+would emit `email_verified` and fail.
+
+The built-in Kysely adapter has no global casing switch — only the Drizzle adapter
+does — so each multi-word field is listed explicitly. **A plugin's own fields are
+mapped through that plugin's `schema` option**, not the top-level `user`/`session`
+maps, which only accept core fields. `src/db/__tests__/camel-case.test.ts` guards
+the whole arrangement.
+
+### Changing the auth schema
+
+After adding or removing a Better Auth plugin, run:
+
+```bash
+bun run auth:schema
+```
+
+It reads the schema from the installed `better-auth` and reports any column the
+database is missing, then you add a migration for the difference.
+
+**Do not use `@better-auth/cli generate`.** It is published separately from the
+library and lags it — 1.4.x against a 1.7.x runtime at the time of writing — so it
+emits a schema missing columns the runtime requires. That migrates cleanly and then
+fails on the first sign-up with `column "issuer" ... does not exist`.
+
+### Protecting a route
+
+`authPlugin` (`src/plugins/auth.plugin.ts`) adds an `auth: true` route option that
+resolves the session and puts `user` and `session` on the handler context:
+
+```typescript
+export const listNotesRoute = new Elysia()
+  .use(contextPlugin)
+  .use(authPlugin)
+  .get("/", async ({ ctx, user }) => ctx.services.notes.listNotes({ userId: user.id }), {
+    auth: true,
+    response: { 200: ListNotesResponseSchema, 401: "ApiErrorResponse" },
+  });
+```
+
+A route without `auth: true` is public. Declare `401: "ApiErrorResponse"` on any
+route that uses it so the failure appears in the OpenAPI document and is narrowed
+for Eden clients.
+
+Take the user id from `user`, never from the request body. Ownership checks belong
+in the service — see `NotesService.getOwnedNote`, and the "Security Context" rule.
+
+### Tests
+
+`testFramework.generateTestFacets()` signs a real user up through the mounted
+handler and returns the session cookie:
+
+```typescript
+const { user, headers } = await testFramework.generateTestFacets();
+const { status } = await testApi.notes.get({ query: { limit: 25, offset: 0 }, headers });
+```
+
+Pass `{ asAdmin: true }` to promote the user, which is the one place that writes to
+a Better Auth table directly — the admin endpoints require an existing admin, so the
+first one cannot be made through the API.
+
 ## Logging
 
 LogLayer, via `@loglayer/elysia`. The plugin builds a **request-scoped** child
@@ -624,23 +729,17 @@ interpolation.
 ```typescript
 import { testFramework } from "@/test-utils/test-framework/index.js";
 
-const { user, headers } = await testFramework.generateTestFacets({ withLogging: true });
-const users = await testFramework.generateNewUsers(5);
+const { user, headers, password } = await testFramework.generateTestFacets();
+const adminFacets = await testFramework.generateTestFacets({ asAdmin: true });
+const freshHeaders = await testFramework.signIn({ email: user.email, password });
 ```
 
-`generateTestFacets` creates a user and returns headers that mock authentication.
+`generateTestFacets` signs a real user up through the mounted Better Auth handler
+and returns the session cookie as `headers`. Spread it onto a `testApi` call to make
+the request authenticated. Pass `{ withLogging: true }` to see server logs, or
+`{ asAdmin: true }` for a user the admin endpoints will accept.
 
-These two methods are the one piece of test infrastructure coupled to the example
-schema — they insert into `users`. When the example goes, adapt them to the real
-domain rather than deleting them; the Testcontainers setup around them is
-infrastructure worth keeping.
-
-| Header | Purpose |
-|--------|---------|
-| `test-user-id` | Sets `userId` to simulate an authenticated user |
-
-These are handled by `src/test-utils/plugins/` and exist only in tests. Server
-logging is off by default to keep output readable.
+Server logging is off by default to keep output readable.
 
 ### Asserting errors
 

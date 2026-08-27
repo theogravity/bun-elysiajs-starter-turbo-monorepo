@@ -10,6 +10,8 @@ export interface CapturedRequest {
   body?: string;
   /** Request headers. */
   headers: Headers;
+  /** Credentials mode, which is what carries the session cookie cross-origin. */
+  credentials?: RequestCredentials;
   /** The request body parsed as JSON, or `undefined` if there was none. */
   json<T = unknown>(): T | undefined;
 }
@@ -64,6 +66,7 @@ export function stubFetch(respond: unknown | Responder, options: { status?: numb
         url: new URL(isRequest ? input.url : String(input)),
         body: rawBody,
         headers: new Headers(init?.headers ?? (isRequest ? input.headers : undefined)),
+        credentials: init?.credentials ?? (isRequest ? input.credentials : undefined),
         json<T>() {
           return rawBody === undefined ? undefined : (JSON.parse(rawBody) as T);
         },

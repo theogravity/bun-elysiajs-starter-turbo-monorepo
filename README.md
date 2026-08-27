@@ -19,9 +19,11 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - Type-safe client SDK via Eden Treaty.
 - Sample REST tests using Vitest.
 - Sample database migrations and repositories using Kysely.
+- Authentication via [Better Auth](https://www.better-auth.com/): email/password, cookie sessions, and an admin plugin for roles, banning and impersonation.
+- Sign-in, sign-up, account and admin user-management screens on the frontend.
 - Shared error handler package for consistent API error responses.
 - Layered backend architecture (routes -> services -> repositories) documented in `apps/backend/AGENTS.md`.
-- Worked end-to-end example: a `users` resource spanning migration, repository, service, routes, tests, and a React page that consumes it — example scaffolding, meant to be replaced (see [Using this as a starter](#using-this-as-a-starter)).
+- Worked end-to-end example: a `notes` resource spanning migration, repository, service, protected routes, tests, and a React page — example scaffolding, meant to be replaced (see [Using this as a starter](#using-this-as-a-starter)).
 
 ## Packages
 
@@ -83,6 +85,15 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
    bun run db:migrate:latest
    ```
 
+6. Set a real auth secret in `apps/backend/.env` (the example value is for local use only):
+   ```bash
+   openssl rand -base64 32
+   ```
+
+To make yourself an admin, sign up through the UI and then run
+`update users set role = 'admin' where email = 'you@example.com';` — the admin
+endpoints require an existing admin, so the first one is promoted directly.
+
 ## Development
 
 ```bash
@@ -119,19 +130,14 @@ import { createBackendClient } from '@internal/backend-client'
 
 const api = createBackendClient('http://localhost:3080')
 
-// POST /users/email
-const { data, error, status } = await api.users.email.post({
-  givenName: 'John',
-  familyName: 'Doe',
-  email: 'john@example.com',
-  password: 'securepass123',
-})
+// GET /notes?limit=25&offset=0 — requires a session cookie
+const list = await api.notes.get({ query: { limit: 25, offset: 0 }, fetch: { credentials: 'include' } })
 
-// GET /users?limit=25&offset=0
-const list = await api.users.get({ query: { limit: 25, offset: 0 } })
+// POST /notes
+const { data, error, status } = await api.notes.post({ title: 'Groceries', body: 'Milk' })
 
-// GET /users/:userId — path params are expressed by calling the segment
-const one = await api.users({ userId: 'a-uuid' }).get()
+// GET /notes/:noteId — path params are expressed by calling the segment
+const one = await api.notes({ noteId: 'a-uuid' }).get()
 ```
 
 The client is Eden Treaty applied to the backend's exported `App` type, so there is no
@@ -155,7 +161,7 @@ bun run syncpack:update
 
 ## Using this as a starter
 
-The `users` resource is **example scaffolding**, not a feature. It exists to show the
+The `notes` resource is **example scaffolding**, not a feature. It exists to show the
 layering working end to end — migration → repository → service → route → test, plus a
 React page consuming the typed client. Replace it with your own domain rather than
 building on top of it.
@@ -166,9 +172,10 @@ scaffolding, which are infrastructure worth keeping, the registrations to clean 
 when you delete one, and two things that bite (deleting `index.tsx` leaves `/`
 unrouted, and removing a route breaks the typed `<Link>` in `__root.tsx`).
 
-The short version: the `users` and `user_providers` files across
-`apps/backend/src/`, plus `apps/frontend/src/api/users.ts` and the example pages
-under `apps/frontend/src/routes/`, are yours to delete. Everything else — the layering, the plugins, the error contract,
+The short version: the `notes` files across `apps/backend/src/`, plus
+`apps/frontend/src/api/notes.ts` and `apps/frontend/src/routes/notes.tsx`, are yours
+to delete. **Authentication is not scaffolding** — Better Auth, its migration, and
+the auth screens are the template. Everything else — the layering, the plugins, the error contract,
 the test setup, the typed client, and all three `packages/` — is the template.
 
 ## Documentation for agents

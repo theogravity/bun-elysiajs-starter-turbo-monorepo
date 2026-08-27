@@ -1,7 +1,5 @@
-import type { UserProvidersRepository } from "@/db/repositories/user-providers.repository.js";
-import type { UsersRepository } from "@/db/repositories/users.repository.js";
+import type { NotesRepository } from "@/db/repositories/notes.repository.js";
 
 export interface Repositories {
-  users: UsersRepository;
-  userProviders: UserProvidersRepository;
+  notes: NotesRepository;
 }
