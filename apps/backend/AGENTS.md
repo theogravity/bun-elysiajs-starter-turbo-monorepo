@@ -567,21 +567,35 @@ in two ways, both deliberate:
 Test code is still type-checked: `bun run verify-types` uses the unrestricted
 `tsconfig.json`.
 
-**`zod` is a runtime dependency that no source file imports.** It looks unused and
-is not:
+**`zod` is a dependency that no source file imports.** It looks unused and is not.
+Removing it fails the build:
 
 ```
 TS2883: The inferred type of 'authOptions' cannot be named without a reference to
-'zod/v4/core'. This is likely not portable. A type annotation is necessary.
+'$strip' from '.bun/zod@4.4.3/node_modules/zod/v4/core'. This is likely not
+portable. A type annotation is necessary.
 ```
 
-Better Auth's inferred config type references zod internals, so emitting a
-declaration for `auth` and `authOptions` means naming them.
+The chain is `src/lib/auth.ts` → `better-auth` → `better-call` (its router, where
+endpoint schemas live) → `zod`. Elysia is not involved: it supports zod through
+Standard Schema but declares no zod dependency and has none in its own `.d.ts`.
+`dist/server.d.ts` — the whole `App` type — emits with zero zod references, while
+`dist/lib/auth.d.ts` contains 32. zod is genuinely part of this package's published
+type surface.
 
-**It cannot be a `devDependency`.** TypeScript refuses to emit a declaration that
-names a type from a devDependency, because a consumer of `@internal/backend` is not
-guaranteed to have it installed. Moving it produces the same `TS2883` even with zod
-present in `node_modules` — verified, not assumed.
+**Read the error carefully: TypeScript *found* the type and is refusing to *name*
+it.** The only specifier it can construct is that `.bun/…` store path, which means
+nothing to a consumer of `@internal/backend`. Declaring the dependency is what makes
+`zod/v4/core` a bare specifier any consumer can resolve.
+
+Two consequences, both verified rather than assumed:
+
+- **A transitive copy is not enough.** With zod removed from `package.json` but
+  still installed under `.bun/`, reachable through `better-auth`, and even linked at
+  `apps/backend/node_modules/zod`, the build fails identically. The declaration is
+  the only variable.
+- **It cannot be a `devDependency`**, for the same reason — a consumer is not
+  guaranteed to have one installed, so TypeScript will not name it.
 
 The alternative is annotating `authOptions` and `auth` explicitly, which would let
 zod go. It is not worth it: annotating `authOptions` as `BetterAuthOptions` erases
