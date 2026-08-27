@@ -43,6 +43,16 @@ function ErrorBoundary({ error }: { error: Error }) {
   );
 }
 
+/**
+ * Devtools are hidden under browser automation.
+ *
+ * They render buttons carrying labels like "Open match details for
+ * /forgot-password", which land in the accessibility tree and collide with
+ * ordinary queries — `getByLabel("Password")` matches three elements. Hiding them
+ * for automated runs keeps end-to-end selectors about the app.
+ */
+const showDevtools = import.meta.env.DEV && !navigator.webdriver;
+
 function RootComponent() {
   const { data } = useSession();
   const role = (data?.user as { role?: string } | undefined)?.role;
@@ -80,8 +90,12 @@ function RootComponent() {
         )}
       </nav>
       <Outlet />
-      <TanStackRouterDevtools />
-      <ReactQueryDevtools />
+      {showDevtools && (
+        <>
+          <TanStackRouterDevtools />
+          <ReactQueryDevtools />
+        </>
+      )}
     </>
   );
 }

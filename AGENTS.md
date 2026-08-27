@@ -14,6 +14,7 @@ area you are touching:
 | Error codes and the API error contract | `packages/backend-errors/README.md` |
 | The typed API client | `packages/backend-client/README.md` |
 | Writing a migration | `apps/backend/src/db/migrations/README.md` |
+| Browser-level tests across both apps | `e2e/AGENTS.md` |
 
 `apps/backend/AGENTS.md` opens with "Conventions you will get wrong if you don't
 read this". That is literal — it covers four things that are invisible in the
@@ -31,6 +32,7 @@ Claude Code reads `CLAUDE.md` instead, so each `AGENTS.md` has a one-line
 
 ```
 CLAUDE.md                 -> @AGENTS.md   (loads at session start)
+e2e/CLAUDE.md             -> @AGENTS.md   (loads when an e2e file is read)
 apps/backend/CLAUDE.md    -> @AGENTS.md   (loads when a backend file is read)
 apps/frontend/CLAUDE.md   -> @AGENTS.md   (loads when a frontend file is read)
 ```
@@ -55,6 +57,7 @@ bun-elysiajs-starter-turbo-monorepo/
 ├── apps/
 │   ├── backend/                    # ElysiaJS API server
 │   └── frontend/                   # React (Vite, TanStack Router/Query, Tailwind)
+├── e2e/                            # Playwright tests across both apps
 ├── packages/
 │   ├── tsconfig/                   # Shared TypeScript configuration
 │   ├── backend-errors/             # ApiError type and error codes
@@ -81,7 +84,8 @@ bun-elysiajs-starter-turbo-monorepo/
 ```bash
 bun run start              # turbo watch dev — everything, in watch mode
 turbo build                # Build all packages in dependency order
-bun run test               # Tests across all packages
+bun run test               # Unit and integration tests across all packages
+bun run test:e2e           # Browser tests across both apps (needs Docker)
 bun run lint               # Biome across all packages
 bun run verify-types       # tsc --noEmit across all packages
 ```

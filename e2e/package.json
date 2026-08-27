@@ -1,0 +1,23 @@
+{
+  "name": "@internal/e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "install-browsers": "playwright install --with-deps chromium",
+    "clean": "rm -rf .turbo node_modules test-results playwright-report",
+    "lint": "biome check --no-errors-on-unmatched --write --unsafe .",
+    "lint:staged": "biome check --no-errors-on-unmatched --write --unsafe --staged .",
+    "verify-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@internal/tsconfig": "workspace:*",
+    "@playwright/test": "1.62.1",
+    "@testcontainers/postgresql": "12.1.0",
+    "@types/node": "26.3.0",
+    "testcontainers": "12.1.0",
+    "typescript": "7.0.2"
+  }
+}

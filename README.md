@@ -122,8 +122,14 @@ turbo watch dev
 Requires Docker — uses Testcontainers to spin up a temporary Postgres instance per test run.
 
 ```bash
-turbo test
+turbo test          # unit and integration
+bun run test:e2e    # browser tests across both apps (needs Docker + Chromium)
 ```
+
+The end-to-end suite starts Postgres and [smtp4dev](https://github.com/rnwood/smtp4dev)
+in containers, boots both apps, and drives a real browser through sign-up, note
+creation, and a full password reset via the emailed link. Run
+`bun run test:e2e:install` once to download Chromium.
 
 ## Build
 

@@ -18,6 +18,21 @@ bun run test -t "should return a 404"               # by test name
 Backend tests need **Docker running** — Testcontainers starts a PostgreSQL container and
 applies all migrations before the suite. A new migration needs no extra test wiring.
 
+## End-to-end
+
+`e2e/` runs Playwright against the real stack — both apps, Postgres, and an SMTP
+server — and covers the seams unit tests cannot: cookies crossing origins, route
+guards, and password reset through a real inbox. It needs Docker and a browser, so
+it is **not** part of `turbo test`:
+
+```bash
+bun run test:e2e:install   # once
+bun run test:e2e
+```
+
+Add a case there when a change spans both apps or leaves the process. See
+`e2e/AGENTS.md`.
+
 ## Guidelines
 
 **Always write tests for new features.** Every new service, repository, route, or significant function should have corresponding tests. Tests should cover:

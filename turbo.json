@@ -33,6 +33,15 @@
     },
     "prod": {
       "persistent": true
+    },
+    "test:e2e": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "install-browsers": {
+      "cache": false
     }
   }
 }

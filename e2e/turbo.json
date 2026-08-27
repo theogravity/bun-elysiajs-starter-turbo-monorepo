@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "clean": {},
+    "lint": { "inputs": ["*.ts", "*.json", "tests/**"] },
+    "verify-types": { "inputs": ["*.ts", "*.json", "tests/**"] },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false
+    }
+  }
+}
