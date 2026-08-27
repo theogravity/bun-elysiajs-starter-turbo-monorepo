@@ -59,8 +59,8 @@ export class BackendRequestError extends Error {
  *
  * @example
  * const { data } = useQuery({
- *   queryKey: ["users", { limit, offset }],
- *   queryFn: () => unwrap(api.users.get({ query: { limit, offset } })),
+ *   queryKey: ["notes", { limit, offset }],
+ *   queryFn: () => unwrap(api.notes.get({ query: { limit, offset } })),
  * });
  */
 export async function unwrap<T>(

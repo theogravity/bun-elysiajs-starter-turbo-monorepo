@@ -14,10 +14,24 @@ directory layout, how to call the API, routing, testing, and the conventions
 below in full. Read `apps/backend/AGENTS.md` when you need to know what the API
 actually exposes. This file is a brief, not a substitute.
 
-The existing pages (`index.tsx`, `users.tsx`, `-users.test.tsx`) are example
-scaffolding for a starter template, not the app. Copy their patterns, but build
-what was actually asked for — do not extend the users example by default, and
-feel free to replace those files.
+The `notes` pages (`notes.tsx`, `-notes.test.tsx`, `src/api/notes.ts`) are example
+scaffolding, not the app. Copy their patterns and build what was actually asked for.
+The auth screens (`signin`, `signup`, `forgot-password`, `reset-password`,
+`account`, `admin/users`) and `src/lib/auth-client.ts` are infrastructure — keep
+them.
+
+## Auth and forms
+
+`useSession` from `@/lib/auth-client` tells you who is signed in; route guards use
+`authClient.getSession()` in `beforeLoad`, because that runs outside React. The
+backend rejects unauthenticated requests regardless — a guard is a redirect, not a
+security boundary.
+
+Forms are **react-hook-form + zod** (`zodResolver`), with schemas in
+`src/lib/auth-schemas.ts` and `src/lib/note-schemas.ts`. Every form needs
+`noValidate`, and failures from our own API go through `applyServerErrors` so the
+server's per-field messages land on the right input. Better Auth resolves with
+`{ error }` rather than throwing, so its failures are set on `root` directly.
 
 ## What most often goes wrong here
 
@@ -35,7 +49,7 @@ feel free to replace those files.
   them from the route tree.
 - **Never call the Eden client from a route or component.** Every endpoint is
   defined once in `src/api/{resource}.ts`, together with its query keys and
-  `queryOptions` factory; import from there. `src/api/users.ts` is the worked
+  `queryOptions` factory; import from there. `src/api/notes.ts` is the worked
   example. Adding an endpoint means editing that module, not a component.
 - **Eden returns `{ data, error }` rather than throwing.** The api module wraps
   calls in `unwrap()` from `@/lib/api` so TanStack Query sees failures.

@@ -14,9 +14,10 @@ at import time, so without the file you get
 `Missing required environment variable "DB_HOST"`. Copy `.env.example` first.
 
 `create` writes `src/db/migrations/{unixMillis}_{name}.ts`, e.g.
-`1787785371937_add_widgets.ts`. That is a different convention from the existing
-`0001-init.ts`; leave the generated name alone rather than renaming it to match,
-since Kysely orders migrations lexicographically by filename. The generated stub
+`1787785371937_add_widgets.ts`. That is a different convention from the two existing
+migrations (`0001-better-auth.ts`, `0002-notes.ts`); leave the generated name alone
+rather than renaming it to match, since Kysely orders migrations lexicographically
+by filename and epoch millis sort after `0002`. The generated stub
 is tab-indented with single quotes — run `bun run lint` after filling it in.
 
 Migrations run automatically against the throwaway Postgres container before the
@@ -34,7 +35,7 @@ There is no type error for a column the database does not have. See
 
 ## House style
 
-`0001-init.ts` is the reference. Follow it:
+`0002-notes.ts` is the reference for an application table. Follow it:
 
 ```typescript
 import { type Kysely, sql } from "kysely";
@@ -68,6 +69,17 @@ export async function down(db: Kysely<any>): Promise<void> {
 - Name foreign keys `fk_{column}` and indexes `idx_{table}_{columns}`
 - `down` must undo everything `up` did, in reverse order — indexes and enum types
   included, not just the tables
+
+## Better Auth owns its own tables
+
+`0001-better-auth.ts` creates `users`, `sessions`, `accounts`, and `verifications`.
+Do not hand-edit it. After adding or removing a Better Auth plugin, run
+`bun run auth:schema` — it diffs the database against what the installed library
+expects — and add a *new* migration for the difference.
+
+Application tables reference `users(id)`, which is `text` rather than `uuid`
+because Better Auth generates its own string ids. See "Authentication" in
+`apps/backend/AGENTS.md`.
 
 ## Postgres enum types
 

@@ -40,11 +40,19 @@ Check these first — each is a real failure mode in this codebase:
   dynamic.
 - **Tests.** New routes, services, and repositories need tests covering the happy
   path, edge cases, and error conditions. Bug fixes need a regression test.
-- **Scaffolding.** The `users` resource is example scaffolding. Flag changes that
-  extend it when the task called for a new domain instead.
-- **Security.** There is no authentication in this template. If a change adds an
-  endpoint handling real data, ask whether authorization was considered — do not
-  assume its absence is intentional.
+- **Scaffolding.** The `notes` resource is example scaffolding; authentication is
+  not. Flag changes that extend `notes` when the task called for a new domain.
+- **Authentication and authorization.** Better Auth owns identity. A route handling
+  user data needs `.use(authPlugin)` and `auth: true`, and must take the owner from
+  `user.id` — never from the request body, which the caller controls. Ownership
+  checks belong in the service so every caller gets them, and should return 404
+  rather than 403 so a probe cannot confirm another user's record exists.
+- **Better Auth's tables.** `users`, `sessions`, `accounts`, `verifications` are
+  Better Auth's. Reads may join `users`; writes go through `auth.api.*`. Flag any
+  repository or service that writes them directly.
+- **Forms.** Client validation is zod via react-hook-form and is *not* the
+  authority. A rule that exists only on the client is a security bug. Forms need
+  `noValidate`, and errors from our API should go through `applyServerErrors`.
 
 Verify with `bun run verify-types`, `bun run lint`, and `bun run test`, plus
 `turbo build` when backend routes or schemas changed.

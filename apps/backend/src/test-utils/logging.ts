@@ -14,7 +14,7 @@ import { logger } from "@/utils/logger.js";
  * @example
  * it("does the thing", async () => {
  *   enableLoggingForTest();
- *   await testApi.users.get({ query: { limit: 1, offset: 0 } });
+ *   await testApi.notes.get({ query: { limit: 1, offset: 0 }, headers });
  * });
  */
 export function enableLoggingForTest(): void {

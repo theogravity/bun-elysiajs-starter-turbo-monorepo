@@ -1,4 +1,28 @@
-# fastify-starter-turbo-monorepo
+# bun-elysiajs-starter-turbo-monorepo
+
+## Aug-27-2026
+
+- **Breaking:** Replace the hand-rolled `users` example with [Better Auth](https://www.better-auth.com/) — email/password, cookie sessions, and the admin plugin (roles, ban, impersonation)
+  - Drops the `users` / `user_providers` tables and their repository, service, routes, and schemas
+  - Better Auth's models are mapped to plural snake_case in `src/lib/auth.ts` so its tables match the rest of the schema and read correctly through Kysely's `CamelCasePlugin`. Plugin fields map through that plugin's own `schema` option, not the top-level maps
+  - `bun run auth:schema` diffs the database against the schema the installed `better-auth` expects. Do **not** use `@better-auth/cli generate`: it is published separately, lags the library, and emits a schema missing `accounts.issuer`, which migrates cleanly and then fails on the first sign-up
+  - Adds `zod` as a backend dependency. Nothing imports it — Better Auth's inferred config type references zod internals, and TypeScript cannot emit a declaration naming a type it can only reach through the package store
+- **Breaking:** Replace the `users` example resource with `notes`, an app-owned table keyed to an authenticated user. Ownership lives in the service and returns 404 rather than 403, so a probe cannot confirm another user's record exists
+- Add email over SMTP (nodemailer) with verification on sign-up and password reset. `docker compose` now runs [smtp4dev](https://github.com/rnwood/smtp4dev) on http://localhost:5001, which captures everything locally
+- Add `react-hook-form` + `zod` for client-side form validation. Server-side validation stays in Elysia's `t` — roughly 18x faster under Bun and the source of the OpenAPI document. `applyServerErrors` maps the backend's JSON pointers onto form fields so the server stays the authority
+- Add Playwright end-to-end tests in `e2e/`, covering cookies crossing origins, route guards, cross-user isolation, and a password reset through a real inbox. Not part of `turbo test`; CI runs it as a separate job
+- Add a `Dockerfile` building the API as a self-contained binary, with a separate `migrate` target for schema changes
+- Add graceful shutdown on `SIGTERM`/`SIGINT`, a `/health` readiness probe that checks the database, and a seed that creates the first admin
+- **Breaking:** `verify-types` and `test` now declare `dependsOn: ["^build"]`. Without it a package type-checks against stale dependency output and Turbo caches the pass — which is how a deleted route stayed green
+- Enable `noImplicitAny`, so a missing type declaration fails as `TS7016` instead of silently degrading to `any`
+- Pin the `postgres` image to 16, matching the test suite, and make the compose port configurable via `POSTGRES_PORT`
+- Pin GitHub Actions to commit SHAs, restrict workflow token permissions to `contents: read`, and add Dependabot for the actions
+- Fixes:
+  - `generateTestFacets({ withLogging: true })` never produced output — the header it set was read after the request logger had already been derived
+  - `errId` was attached to the shared logger, so it leaked onto every later line including successful requests
+  - React Testing Library's cleanup was never registered, so the DOM leaked between frontend tests
+  - `clean:dist` and `clean:turbo` deleted directories inside `node_modules`
+- Remove the unused `IS_GENERATING_CLIENT` constant and the `ajv` dependency, a type-only import left over from a Fastify port
 
 ## Aug-26-2026
 

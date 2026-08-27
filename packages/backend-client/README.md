@@ -8,7 +8,13 @@ import { createBackendClient } from "@internal/backend-client";
 
 const api = createBackendClient("http://localhost:3080");
 
-const { data, error, status } = await api.users.get({ query: { limit: 25, offset: 0 } });
+// Most endpoints require a Better Auth session, so send credentials — the frontend
+// client in `apps/frontend/src/lib/api.ts` is configured to do this by default.
+
+const { data, error, status } = await api.notes.get({
+  query: { limit: 25, offset: 0 },
+  fetch: { credentials: "include" },
+});
 ```
 
 ## How it works
@@ -46,7 +52,7 @@ devDependencies for exactly this reason.
 Eden resolves rather than throws:
 
 ```typescript
-const { data, error, status } = await api.users({ userId }).get();
+const { data, error, status } = await api.notes({ noteId }).get();
 
 if (error) {
   switch (error.status) {
