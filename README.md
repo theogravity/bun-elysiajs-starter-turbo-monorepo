@@ -18,7 +18,9 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - OpenAPI docs via Scalar UI at `/docs`.
 - Type-safe client SDK via Eden Treaty.
 - Sample REST tests using `bun test`.
-- Sample database migrations and repositories using Kysely.
+- Sample database migrations and repositories using Kysely, on Postgres by default —
+  swappable for Bun's native SQLite driver (see
+  [Using SQLite instead of Postgres](#using-sqlite-instead-of-postgres)).
 - Authentication via [Better Auth](https://www.better-auth.com/): email/password, cookie sessions, and an admin plugin for roles, banning and impersonation.
 - Sign-in, sign-up, password reset, account and admin user-management screens, with react-hook-form + zod validation.
 - Email verification and password reset over SMTP, with [smtp4dev](https://github.com/rnwood/smtp4dev) in the Docker stack so nothing leaves your machine in development.
@@ -49,7 +51,9 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - [`@tanstack/react-query`](https://tanstack.com/query) for data fetching
 - [`tailwindcss`](https://tailwindcss.com/) for styling
 - [`kysely`](https://kysely.dev/) for the database query builder
-- [`postgres`](https://www.postgresql.org/) for the database
+- [`postgres`](https://www.postgresql.org/) for the database — or
+  [`kysely-bun-sqlite-dialect`](https://www.npmjs.com/package/kysely-bun-sqlite-dialect)
+  if you would rather run on `bun:sqlite`
 - [`testcontainers`](https://www.testcontainers.org/) for testing with a sandboxed Postgres instance
 - [`bun test`](https://bun.com/docs/cli/test) for testing
 - [`loglayer`](https://loglayer.dev/) + [`@loglayer/elysia`](https://loglayer.dev/integrations/elysia) for request-scoped logging
@@ -168,6 +172,68 @@ bun run db:migrate:create   # Create a new migration
 bun run db:migrate:latest   # Apply all pending migrations
 bun run db:migrate:undo     # Roll back the last migration
 ```
+
+## Using SQLite instead of Postgres
+
+Postgres is the default, but nothing in the layering depends on it — Kysely is the
+only thing that talks to the database. To run on Bun's native
+[`bun:sqlite`](https://bun.com/docs/runtime/sqlite) driver instead, use
+[`kysely-bun-sqlite-dialect`](https://www.npmjs.com/package/kysely-bun-sqlite-dialect):
+
+```bash
+cd apps/backend
+bun add kysely-bun-sqlite-dialect
+bun remove pg @types/pg
+```
+
+Then swap the dialect in `apps/backend/src/db/index.ts`:
+
+```typescript
+import { Database } from "bun:sqlite";
+import { CamelCasePlugin, Kysely } from "kysely";
+import { BunSqliteDialect } from "kysely-bun-sqlite-dialect";
+import { DB_FILE } from "@/constants.js";
+import type { Database as Schema } from "@/db/types/index.js";
+
+export const kyselyDialect = new BunSqliteDialect({
+  // A function defers opening until the first query, and is where pragmas go.
+  database: async () => {
+    const database = new Database(DB_FILE);
+    database.run("pragma journal_mode = WAL");
+    database.run("pragma foreign_keys = ON");
+    return database;
+  },
+  // In WAL mode, take the write lock up front rather than risking SQLITE_BUSY
+  // when a transaction that has already read tries to upgrade its lock.
+  transactionBehavior: "immediate",
+});
+
+export const kyselyPlugins = [new CamelCasePlugin()];
+
+export const db = new Kysely<Schema>({ dialect: kyselyDialect, plugins: kyselyPlugins });
+```
+
+`kysely.config.js` reads `kyselyDialect`, `kyselyPlugins` and `db` out of that file, so
+migrations and seeds follow the swap with nothing further to configure. `CamelCasePlugin`
+is unaffected, and `closeDatabase()` still works — `db.destroy()` closes the underlying
+`Database`.
+
+The rest is what actually costs time:
+
+- **Better Auth takes the Postgres pool directly** (`src/lib/auth.ts`). Hand it the
+  dialect instead, so it keeps sharing one connection rather than opening a second:
+  `database: { dialect: kyselyDialect, type: "sqlite" }`.
+- **The migrations are written in Postgres types.** `uuid`, `timestamptz`,
+  `varchar(200)`, `gen_random_uuid()` and `now()` all need SQLite equivalents — `text`
+  columns, `current_timestamp`, and ids generated in the application.
+- **`bun:sqlite` will not bind a `Date`.** Store timestamps as ISO strings or epoch
+  numbers. The dialect's README covers this and the other differences from
+  `better-sqlite3`.
+- **Tests lose their Docker dependency.** `apps/backend/src/test-utils/setup.ts` and
+  `e2e/stack.ts` start a Postgres container per run; `new Database(":memory:")`
+  replaces it. Docker is then only needed for smtp4dev in the e2e suite.
+- **`pgPool`, the `DB_*` env vars, and the Postgres and PGAdmin services in
+  `docker-compose.yaml` all go away** — as does the setup step that starts them.
 
 ## Update all dependencies
 
