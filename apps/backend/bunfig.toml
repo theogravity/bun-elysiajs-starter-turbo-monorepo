@@ -1,0 +1,4 @@
+[test]
+# Starts the Postgres testcontainer and applies every migration before the first
+# test file, and stops it after the last one. See src/test-utils/setup.ts.
+preload = ["./src/test-utils/setup.ts"]

@@ -1,22 +1,23 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient, signIn, useSession } from "@/lib/auth-client";
+import { asMock } from "@/test-utils/mock";
 import { renderRoute } from "@/test-utils/router";
 
-vi.mock("@/lib/auth-client", () => ({
-  authClient: { getSession: vi.fn() },
-  useSession: vi.fn(),
-  signIn: { email: vi.fn() },
-  signUp: { email: vi.fn() },
-  signOut: vi.fn(),
+mock.module("@/lib/auth-client", () => ({
+  authClient: { getSession: mock() },
+  useSession: mock(),
+  signIn: { email: mock() },
+  signUp: { email: mock() },
+  signOut: mock(),
 }));
 
 describe("Sign-in form", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authClient.getSession).mockResolvedValue({ data: null } as never);
-    vi.mocked(useSession).mockReturnValue({ data: null, isPending: false } as never);
+    mock.clearAllMocks();
+    asMock(authClient.getSession).mockResolvedValue({ data: null } as never);
+    asMock(useSession).mockReturnValue({ data: null, isPending: false } as never);
   });
 
   it("blocks submission and shows a field error for an invalid email", async () => {
@@ -34,7 +35,7 @@ describe("Sign-in form", () => {
 
   it("submits valid input and surfaces a server rejection", async () => {
     const user = userEvent.setup();
-    vi.mocked(signIn.email).mockResolvedValue({ error: { message: "Invalid email or password" } } as never);
+    asMock(signIn.email).mockResolvedValue({ error: { message: "Invalid email or password" } } as never);
 
     renderRoute("/signin");
 

@@ -25,7 +25,7 @@
     "lint": "biome check --no-errors-on-unmatched --write --unsafe src",
     "lint:staged": "biome check --no-errors-on-unmatched --write --unsafe --staged src",
     "prod": "bun run ./dist/index.js",
-    "test": "vitest --run",
+    "test": "bun test",
     "verify-types": "tsc --noEmit",
     "auth:schema": "bun run ./src/db/scripts/print-auth-schema.ts"
   },
@@ -55,13 +55,13 @@
     "@faker-js/faker": "10.6.0",
     "@internal/tsconfig": "workspace:*",
     "@testcontainers/postgresql": "12.1.0",
+    "@types/bun": "1.4.0",
     "@types/node": "26.3.0",
     "@types/nodemailer": "8.0.1",
     "@types/pg": "8.23.1",
     "jiti": "2.7.0",
     "kysely-ctl": "0.21.0",
     "tsc-alias": "1.9.2",
-    "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "typescript": "7.0.2"
   }
 }

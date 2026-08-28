@@ -18,7 +18,7 @@ for the API this talks to.
 ```bash
 bun run dev             # Vite dev server on http://localhost:5173
 bun run build           # Production build (also regenerates routeTree.gen.ts)
-bun run test            # Vitest + React Testing Library (happy-dom)
+bun run test            # bun test + React Testing Library (happy-dom)
 bun run lint            # Biome check + autofix
 bun run verify-types    # tsc --noEmit
 ```
@@ -47,6 +47,7 @@ src/
 │   └── logger.ts        # LogLayer browser logger
 ├── test-utils/
 │   ├── fetch.ts         # stubFetch() — only for src/api/ tests
+│   ├── mock.ts          # asMock() — types a function mock.module replaced
 │   └── router.tsx       # renderRoute() — renders the real route tree
 ├── routes/
 │   ├── __tests__/
@@ -65,7 +66,9 @@ src/
 │   └── notes.tsx        # /notes     — example protected route
 ├── routeTree.gen.ts     # Auto-generated. Never edit.
 ├── main.tsx             # Router + QueryClientProvider composition
-├── test-setup.ts        # Registers jest-dom matchers with Vitest
+├── test-dom.ts          # Preload 1: installs happy-dom's globals
+├── test-setup.ts        # Preload 2: jest-dom matchers + RTL cleanup
+├── test-matchers.d.ts   # Declares the jest-dom matchers on bun:test's expect
 ├── vite-env.d.ts        # Types for import.meta.env
 └── styles.css           # Tailwind entry
 ```
@@ -87,8 +90,8 @@ import { api } from "@/lib/api";     // correct
 import { api } from "@/lib/api.js";  // wrong here, right in the backend
 ```
 
-`@/` is aliased to `src/` in `tsconfig.json`, `vite.config.ts`, and
-`vitest.config.ts` — all three must agree if you change it.
+`@/` is aliased to `src/` in `tsconfig.json` and `vite.config.ts` — both must
+agree if you change it. `bun test` reads the alias from `tsconfig.json` directly.
 
 ### Environment
 
@@ -395,7 +398,30 @@ error.
 
 ## Testing
 
-Vitest with happy-dom and React Testing Library.
+`bun test` with happy-dom and React Testing Library.
+
+### How the runner is configured
+
+`bunfig.toml` lists two preloads, and the order is load-bearing:
+
+```toml
+[test]
+preload = ["./src/test-dom.ts", "./src/test-setup.ts"]
+```
+
+- **`src/test-dom.ts`** calls happy-dom's `GlobalRegistrator.register()`, which is
+  what supplies `window` and `document`. It has to be a file of its own: `import`
+  declarations are hoisted, so anything imported beside `GlobalRegistrator` would
+  evaluate before `register()` runs — and `@testing-library/dom` binds `screen` to
+  `document.body` at module scope, so it throws *"a global document has to be
+  available"* if it loads first. The same file sets `process.env.MODE = "test"`,
+  because Bun backs `import.meta.env` with `process.env` and does not define Vite's
+  `MODE` itself.
+- **`src/test-setup.ts`** registers the jest-dom matchers with `expect.extend` and
+  `afterEach(cleanup)`.
+
+There is no config file beyond `bunfig.toml`. `bun test` resolves `@/` from
+`tsconfig.json` and transpiles TSX itself, so nothing needs a Vite plugin.
 
 ### Devtools are off in tests
 
@@ -407,26 +433,31 @@ which land in the accessibility tree — with them mounted,
 `getByLabel("Password")` matches three elements. That surfaced as six failing
 end-to-end tests before it was fixed.
 
-Both conditions matter. `MODE !== "test"` covers Vitest; `!navigator.webdriver`
-covers Playwright, which runs a normal build in a real browser. happy-dom happens to
-report `webdriver` as true, so either would work today — but jsdom reports false, so
-relying on one alone would let devtools reappear in the DOM under assertion if the
-environment changed. `-devtools.test.tsx` guards it.
+Both conditions matter. `MODE !== "test"` covers the unit tests — which is why
+`src/test-dom.ts` sets `MODE` explicitly rather than letting it happen to be
+undefined; `!navigator.webdriver` covers Playwright, which runs a normal build in a
+real browser. happy-dom happens to report `webdriver` as true, so either would work
+today — but jsdom reports false, so relying on one alone would let devtools reappear
+in the DOM under assertion if the environment changed. `-devtools.test.tsx` guards
+it.
 
-`src/test-setup.ts` does two things that both exist because `globals` is off in the
-Vitest config:
+Two details in `src/test-setup.ts` are worth knowing:
 
-- imports `@testing-library/jest-dom/vitest`, **not** the bare
-  `@testing-library/jest-dom`. The bare entrypoint assumes a global `expect` and
-  makes every test file fail to load with `expect is not defined`.
-- registers `afterEach(cleanup)`. React Testing Library only auto-registers its
+- it imports `@testing-library/jest-dom/matchers` and passes them to
+  `expect.extend`, **not** the bare `@testing-library/jest-dom`. The bare
+  entrypoint assumes a global `expect` and makes every test file fail to load with
+  `expect is not defined`. The `/vitest` and `/jest-globals` entrypoints wire the
+  matchers into a different runner's `expect`, so neither applies here.
+  `src/test-matchers.d.ts` augments bun:test's `Matchers` interface so the matchers
+  typecheck.
+- it registers `afterEach(cleanup)`. React Testing Library only auto-registers its
   cleanup when globals are available, so without this the DOM from one test leaks
   into the next and queries start finding duplicate elements.
 
 Component tests live alongside the component as `Component.test.tsx`. Route tests
 go in `src/routes/__tests__/` and **must be prefixed with `-`**
 (`-notes.test.tsx`) so the router plugin does not treat them as routes. A
-`-`-prefixed file is still collected and run by Vitest; it is only excluded from
+`-`-prefixed file still matches `*.test.tsx` and is run; it is only excluded from
 `routeTree.gen.ts`.
 
 `src/routes/__tests__/-notes.test.tsx` is a working example of the whole pattern.
@@ -476,22 +507,26 @@ expect(captured[0]?.url.searchParams.get("limit")).toBe("25");
 error reply — `stubFetch(body, { status: 404 })` — or a function to vary the reply
 per request.
 
-No cleanup is needed: `unstubGlobals` is set in `vitest.config.ts`, so a stub is
-removed before the next test and cannot leak.
+No cleanup is needed: `stubFetch` registers its own `onTestFinished`, which puts
+the real `fetch` back when the test ends, so a stub cannot leak into the next one.
 
 **Component and route tests — `renderRoute` from `@/test-utils/router`, and mock
 `@/api/{resource}`.** No `Response` objects, no URLs, no coupling to how the
 request is made:
 
 ```typescript
+import { mock } from "bun:test";
+import * as notesApi from "@/api/notes";
+import { notesListQuery } from "@/api/notes";
+import { asMock } from "@/test-utils/mock";
 import { renderRoute } from "@/test-utils/router";
 
-vi.mock("@/api/notes", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/notes")>()),
-  notesListQuery: vi.fn(),
-}));
+// bun:test has no `importOriginal` callback, so the real module is imported as a
+// namespace and spread. `mock.module` is not hoisted the way Vitest's `vi.mock`
+// was, which is what makes reading the original here safe rather than circular.
+mock.module("@/api/notes", () => ({ ...notesApi, notesListQuery: mock() }));
 
-vi.mocked(notesListQuery).mockReturnValue(
+asMock(notesListQuery).mockReturnValue(
   queryOptions({
     queryKey: noteKeys.list({ limit: NOTES_PAGE_SIZE, offset: 0 }),
     queryFn: async () => ({ notes: [], total: 0 }),
@@ -500,6 +535,13 @@ vi.mocked(notesListQuery).mockReturnValue(
 
 renderRoute("/notes");
 ```
+
+`mock.module` replaces a module's exports at runtime and updates the live bindings
+of anything that already imported it, so it works wherever it appears in the file —
+but the imported name keeps the *real* function's type. `asMock`
+(`@/test-utils/mock`) is the one-line cast that gets you `mockReturnValue` and
+friends; it is this repo's stand-in for Vitest's `vi.mocked`. Use `mock.clearAllMocks()`
+in a `beforeEach` where you previously used `vi.clearAllMocks()`.
 
 `renderRoute` builds the real route tree with the same wiring as `main.tsx` —
 `queryClient` in the router context, a `QueryClientProvider` above — with retries

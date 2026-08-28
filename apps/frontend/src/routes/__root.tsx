@@ -52,7 +52,8 @@ function ErrorBoundary({ error }: { error: Error }) {
  *
  * Both conditions are deliberate, not redundant:
  *
- * - `MODE !== "test"` covers Vitest, which sets `MODE` to `"test"`.
+ * - `MODE !== "test"` covers the unit tests. Bun does not define Vite's `MODE`,
+ *   so `src/test-dom.ts` sets it as part of the test preload.
  * - `!navigator.webdriver` covers Playwright and other browser automation, which
  *   runs a production-mode build against a real browser where `MODE` is not
  *   `"test"`.

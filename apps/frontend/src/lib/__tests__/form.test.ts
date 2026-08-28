@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
 import { BackendRequestError } from "@/lib/api";
 import { applyServerErrors } from "@/lib/form";
 
@@ -15,7 +15,7 @@ function validationError(entries: Array<{ path: string; message: string }>) {
 
 describe("applyServerErrors", () => {
   it("maps a JSON pointer onto the matching form field", () => {
-    const setError = vi.fn();
+    const setError = mock();
 
     applyServerErrors(setError, validationError([{ path: "/title", message: "Too short" }]));
 
@@ -23,7 +23,7 @@ describe("applyServerErrors", () => {
   });
 
   it("maps every reported field, not just the first", () => {
-    const setError = vi.fn();
+    const setError = mock();
 
     applyServerErrors(
       setError,
@@ -38,7 +38,7 @@ describe("applyServerErrors", () => {
   });
 
   it("converts a nested pointer to react-hook-form's dotted path", () => {
-    const setError = vi.fn();
+    const setError = mock();
 
     applyServerErrors(setError, validationError([{ path: "/address/city", message: "Required" }]));
 
@@ -46,7 +46,7 @@ describe("applyServerErrors", () => {
   });
 
   it("falls back to a form-level error when no field can be identified", () => {
-    const setError = vi.fn();
+    const setError = mock();
 
     applyServerErrors(setError, new BackendRequestError(401, { code: "INVALID_CREDENTIALS", message: "Sign in" }));
 
@@ -54,7 +54,7 @@ describe("applyServerErrors", () => {
   });
 
   it("handles a plain Error, such as a network failure", () => {
-    const setError = vi.fn();
+    const setError = mock();
 
     applyServerErrors(setError, new Error("Network down"));
 

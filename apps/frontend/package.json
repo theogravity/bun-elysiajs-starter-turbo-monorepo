@@ -10,7 +10,7 @@
     "clean": "rm -rf .turbo node_modules dist",
     "lint": "biome check --no-errors-on-unmatched --write --unsafe src",
     "lint:staged": "biome check --no-errors-on-unmatched --write --unsafe --staged src",
-    "test": "vitest --run --passWithNoTests",
+    "test": "bun test --pass-with-no-tests",
     "verify-types": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@elysiajs/eden": "1.4.9",
+    "@happy-dom/global-registrator": "20.11.12",
     "@internal/tsconfig": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query-devtools": "5.102.6",
@@ -38,14 +39,13 @@
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
+    "@types/bun": "1.4.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.0",
     "elysia": "1.4.30",
-    "happy-dom": "20.11.6",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.2.2",
-    "vitest": "4.1.11"
+    "vite": "8.2.2"
   }
 }

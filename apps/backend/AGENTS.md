@@ -447,7 +447,7 @@ import time; a missing required variable throws on boot.
 | `SMTP_FROM` | no | `no-reply@example.com` | Envelope From on outbound mail |
 
 `NODE_ENV` drives `IS_PROD` and `IS_TEST`. Tests do not read `.env` — the
-Testcontainers global setup injects the database variables before anything reads
+Testcontainers preload injects the database variables before anything reads
 them, which is why a missing `.env` is not an error during a test run. dotenvx's
 `MISSING_ENV_FILE` warning is suppressed for the same reason; a genuinely missing
 variable still fails, with a message naming the variable and pointing at
@@ -535,7 +535,7 @@ take the owner from `user.id` rather than from the request, and declare
 `401: "ApiErrorResponse"` in the response map. See [Authentication](#authentication).
 
 **6. Test** — `src/api/widgets/__tests__/{operation}.route.test.ts` driven through
-`testApi`. Migrations are applied automatically by the global setup, so a new
+`testApi`. Migrations are applied automatically by the test preload, so a new
 migration needs no test wiring.
 
 **7. Rebuild** — `turbo build` from the repo root, so the new routes reach the
@@ -791,8 +791,8 @@ than a request header — the header-based version could not work.
 
 ## Testing
 
-Tests use **Vitest** with **Testcontainers**, which starts a PostgreSQL container
-and applies all migrations before the suite runs. Docker must be running.
+Tests run on **`bun test`** with **Testcontainers**, which starts a PostgreSQL
+container and applies all migrations before the suite runs. Docker must be running.
 
 ```bash
 bun run test                                   # everything
@@ -802,11 +802,20 @@ bun run test -t "hides another user's note"
 
 ### Infrastructure
 
-- `src/test-utils/global-setup.ts` — starts Postgres, sets `DB_*`, runs migrations
-- `src/test-utils/global-teardown.ts` — stops the container
+- `bunfig.toml` — declares the one preload under `[test]`. There is no config file
+  beyond this; `bun test` finds `*.test.ts` under `src/` on its own
+- `src/test-utils/setup.ts` — the preload. Starts Postgres, sets `DB_*`, runs
+  migrations, and stops the container again when the run ends
 - `src/test-utils/test-server.ts` — `testApi`, an Eden Treaty client bound to the
   app instance directly, so no network is involved
 - `src/test-utils/test-framework/` — fixture generation
+
+**Why setup and teardown are one file.** Bun runs every test file in a single
+process, so a preload is evaluated exactly once, before the first file — and its
+top-level `await` blocks collection until the container is migrated. Lifecycle
+hooks registered in a preload are global, so the `afterAll` in that same module
+fires after the last file. The container and pool therefore live in module scope
+instead of being handed between two modules on `globalThis`.
 
 ### `testApi`
 
@@ -875,4 +884,4 @@ Tests live in `__tests__/` next to the code they test. Cover the happy path, edg
 cases (empty results, pagination boundaries), and error conditions. When fixing a
 bug, add the failing test first.
 
-Available: `vitest`, `@faker-js/faker`, `@elysiajs/eden`, `testcontainers`.
+Available: `bun:test`, `@faker-js/faker`, `@elysiajs/eden`, `testcontainers`.

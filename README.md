@@ -17,7 +17,7 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - Monorepo setup using [`turbo`](https://turbo.build/) and [Bun workspaces](https://bun.sh/docs/install/workspaces).
 - OpenAPI docs via Scalar UI at `/docs`.
 - Type-safe client SDK via Eden Treaty.
-- Sample REST tests using Vitest.
+- Sample REST tests using `bun test`.
 - Sample database migrations and repositories using Kysely.
 - Authentication via [Better Auth](https://www.better-auth.com/): email/password, cookie sessions, and an admin plugin for roles, banning and impersonation.
 - Sign-in, sign-up, password reset, account and admin user-management screens, with react-hook-form + zod validation.
@@ -51,7 +51,7 @@ A starter project for building a full-stack application using **Bun**, TypeScrip
 - [`kysely`](https://kysely.dev/) for the database query builder
 - [`postgres`](https://www.postgresql.org/) for the database
 - [`testcontainers`](https://www.testcontainers.org/) for testing with a sandboxed Postgres instance
-- [`vitest`](https://vitest.dev/) for testing
+- [`bun test`](https://bun.com/docs/cli/test) for testing
 - [`loglayer`](https://loglayer.dev/) + [`@loglayer/elysia`](https://loglayer.dev/integrations/elysia) for request-scoped logging
 - [`hash-runner`](https://github.com/theogravity/hash-runner) for incremental dev builds
 - [`biome`](https://biomejs.dev/) for linting and formatting

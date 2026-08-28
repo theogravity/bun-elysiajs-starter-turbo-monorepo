@@ -1,4 +1,4 @@
-import { onTestFinished } from "vitest";
+import { onTestFinished } from "bun:test";
 import { logger } from "@/utils/logger.js";
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { testFramework } from "@/test-utils/test-framework/index.js";
 import { testApp } from "@/test-utils/test-server.js";
 

@@ -76,7 +76,7 @@ bun-elysiajs-starter-turbo-monorepo/
 - **Email**: nodemailer over SMTP; smtp4dev catches everything in development
 - **Auth**: Better Auth — email/password, cookie sessions, admin plugin (roles, ban, impersonate)
 - **Client SDK**: Eden Treaty — type inference, no code generation
-- **Testing**: Vitest, Testcontainers (backend), React Testing Library (frontend)
+- **Testing**: `bun test`, Testcontainers (backend), React Testing Library over happy-dom (frontend)
 - **Tooling**: Turborepo, Biome, syncpack, lefthook, commitlint
 
 ## Common commands

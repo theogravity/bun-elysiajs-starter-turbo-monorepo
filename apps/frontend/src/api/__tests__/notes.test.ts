@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createNote, listNotes, NOTES_PAGE_SIZE, noteKeys, notesListQuery } from "@/api/notes";
 import { BackendRequestError } from "@/lib/api";
 import { stubFetch } from "@/test-utils/fetch";
@@ -52,7 +52,7 @@ describe("notes api", () => {
     });
 
     it("nests under a common prefix for invalidation", () => {
-      expect(notesListQuery().queryKey.slice(0, 1)).toEqual(noteKeys.all);
+      expect(notesListQuery().queryKey.slice(0, 1)).toEqual([...noteKeys.all]);
     });
   });
 });

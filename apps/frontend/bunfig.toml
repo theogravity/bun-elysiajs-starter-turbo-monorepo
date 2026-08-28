@@ -1,0 +1,4 @@
+[test]
+# Order matters: test-dom.ts must register happy-dom's globals before anything that
+# touches `document` is imported. See the comment in src/test-dom.ts.
+preload = ["./src/test-dom.ts", "./src/test-setup.ts"]

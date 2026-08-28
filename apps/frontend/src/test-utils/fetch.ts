@@ -1,4 +1,7 @@
-import { vi } from "vitest";
+import { mock, onTestFinished } from "bun:test";
+
+/** Captured once at module load, before any test has had a chance to replace it. */
+const realFetch = globalThis.fetch;
 
 /** A request the stub intercepted. */
 export interface CapturedRequest {
@@ -35,8 +38,8 @@ type Responder = (request: CapturedRequest) => StubbedResponse;
  * tested. Component and route tests mock `@/api/{resource}` instead, so they never
  * need to know how a request is made. See `apps/frontend/AGENTS.md`, "Testing".
  *
- * The stub is removed automatically before each test (`unstubGlobals` in
- * `vitest.config.ts`), so no `afterEach` cleanup is required.
+ * The stub registers its own `onTestFinished`, so `fetch` is restored when the test
+ * ends and no `afterEach` cleanup is required.
  *
  * @param respond - The JSON body to reply with, or a function returning a
  *   {@link StubbedResponse} per request when different calls need different replies.
@@ -55,34 +58,35 @@ type Responder = (request: CapturedRequest) => StubbedResponse;
 export function stubFetch(respond: unknown | Responder, options: { status?: number } = {}): CapturedRequest[] {
   const captured: CapturedRequest[] = [];
 
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const isRequest = typeof input === "object" && "url" in input;
-      const rawBody = typeof init?.body === "string" ? init.body : undefined;
+  onTestFinished(() => {
+    globalThis.fetch = realFetch;
+  });
 
-      const request: CapturedRequest = {
-        method: (init?.method ?? (isRequest ? input.method : "GET")).toUpperCase(),
-        url: new URL(isRequest ? input.url : String(input)),
-        body: rawBody,
-        headers: new Headers(init?.headers ?? (isRequest ? input.headers : undefined)),
-        credentials: init?.credentials ?? (isRequest ? input.credentials : undefined),
-        json<T>() {
-          return rawBody === undefined ? undefined : (JSON.parse(rawBody) as T);
-        },
-      };
+  globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const isRequest = typeof input === "object" && "url" in input;
+    const rawBody = typeof init?.body === "string" ? init.body : undefined;
 
-      captured.push(request);
+    const request: CapturedRequest = {
+      method: (init?.method ?? (isRequest ? input.method : "GET")).toUpperCase(),
+      url: new URL(isRequest ? input.url : String(input)),
+      body: rawBody,
+      headers: new Headers(init?.headers ?? (isRequest ? input.headers : undefined)),
+      credentials: init?.credentials ?? (isRequest ? input.credentials : undefined),
+      json<T>() {
+        return rawBody === undefined ? undefined : (JSON.parse(rawBody) as T);
+      },
+    };
 
-      const reply: StubbedResponse =
-        typeof respond === "function" ? (respond as Responder)(request) : { body: respond, status: options.status };
+    captured.push(request);
 
-      return new Response(JSON.stringify(reply.body ?? null), {
-        status: reply.status ?? 200,
-        headers: { "content-type": "application/json", ...reply.headers },
-      });
-    }),
-  );
+    const reply: StubbedResponse =
+      typeof respond === "function" ? (respond as Responder)(request) : { body: respond, status: options.status };
+
+    return new Response(JSON.stringify(reply.body ?? null), {
+      status: reply.status ?? 200,
+      headers: { "content-type": "application/json", ...reply.headers },
+    });
+  }) as unknown as typeof fetch; // The mock has no `preconnect`; nothing under test calls it.
 
   return captured;
 }

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { getRequestlessContext } from "@/lib/context.js";
 import { testFramework } from "@/test-utils/test-framework/index.js";
 

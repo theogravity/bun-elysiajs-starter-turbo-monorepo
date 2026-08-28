@@ -20,6 +20,10 @@ rule is wired to the right status.
 
 ## Commands
 
+Unit and integration tests run on **`bun test`** — there is no Vitest or Jest here.
+Import `describe`, `it`, `expect`, `mock`, and the lifecycle hooks from `bun:test`.
+Browser tests are Playwright, in `e2e/`.
+
 ```bash
 bun run test                  # everything except e2e, across all packages
 bun run test:e2e              # browser tests (needs Docker + `bun run test:e2e:install` once)

@@ -1,21 +1,22 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient, useSession } from "@/lib/auth-client";
+import { asMock } from "@/test-utils/mock";
 import { renderRoute } from "@/test-utils/router";
 
-vi.mock("@/lib/auth-client", () => ({
-  authClient: { getSession: vi.fn() },
-  useSession: vi.fn(),
-  signIn: { email: vi.fn() },
-  signUp: { email: vi.fn() },
-  signOut: vi.fn(),
+mock.module("@/lib/auth-client", () => ({
+  authClient: { getSession: mock() },
+  useSession: mock(),
+  signIn: { email: mock() },
+  signUp: { email: mock() },
+  signOut: mock(),
 }));
 
 describe("Root route", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authClient.getSession).mockResolvedValue({ data: null } as never);
-    vi.mocked(useSession).mockReturnValue({ data: null, isPending: false } as never);
+    mock.clearAllMocks();
+    asMock(authClient.getSession).mockResolvedValue({ data: null } as never);
+    asMock(useSession).mockReturnValue({ data: null, isPending: false } as never);
   });
 
   it("renders a not-found page for an unknown URL", async () => {

@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import { BackendErrorCodes } from "@internal/backend-errors";
-import { describe, expect, it } from "vitest";
 import { testFramework } from "@/test-utils/test-framework/index.js";
 import { testApi } from "@/test-utils/test-server.js";
 
